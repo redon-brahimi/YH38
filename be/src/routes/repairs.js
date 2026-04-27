@@ -1,0 +1,167 @@
+import express from 'express';
+import pkg from 'pg';
+const { Pool } = pkg;
+
+const router = express.Router();
+
+// Initialize database connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// POST /api/repairs - Create a new repair ticket
+router.post('/', async (req, res) => {
+  try {
+    const {
+      client_name,
+      client_email,
+      client_phone,
+      device_type,
+      device_model,
+      issue_description,
+      priority = 'normal'
+    } = req.body;
+
+    // Validate required fields
+    if (!client_name || !client_email || !device_type || !device_model || !issue_description) {
+      return res.status(400).json({
+        success: false,
+        error: 'Tous les champs requis doivent être remplis'
+      });
+    }
+
+    // Create or find client
+    let clientResult = await pool.query(
+      'SELECT id FROM clients WHERE email = $1',
+      [client_email]
+    );
+
+    let clientId;
+    if (clientResult.rows.length === 0) {
+      const newClient = await pool.query(
+        'INSERT INTO clients (name, email, phone) VALUES ($1, $2, $3) RETURNING id',
+        [client_name, client_email, client_phone]
+      );
+      clientId = newClient.rows[0].id;
+    } else {
+      clientId = clientResult.rows[0].id;
+    }
+
+    // Create repair
+    const repairResult = await pool.query(
+      'INSERT INTO repairs (client_id, device_type, device_model, issue_description, priority) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [clientId, device_type, device_model, issue_description, priority]
+    );
+
+    const repair = repairResult.rows[0];
+    const trackingCode = `YH38-${repair.id.toString().padStart(6, '0')}`;
+
+    res.status(201).json({
+      success: true,
+      repair: {
+        id: repair.id,
+        tracking_code: trackingCode,
+        status: repair.status,
+        device_type: repair.device_type,
+        device_model: repair.device_model,
+        priority: repair.priority,
+        created_at: repair.created_at
+      },
+      message: `Ticket de réparation créé avec succès. Code de suivi: ${trackingCode}`
+    });
+  } catch (error) {
+    console.error('Error creating repair:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la création du ticket de réparation'
+    });
+  }
+});
+
+// GET /api/repairs/:trackingCode - Get repair status by tracking code
+router.get('/:trackingCode', async (req, res) => {
+  try {
+    const trackingCode = req.params.trackingCode;
+
+    // Validate tracking code format
+    if (!trackingCode.startsWith('YH38-')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Format de code de suivi invalide. Utilisez le format YH38-XXXXXX'
+      });
+    }
+
+    const repairId = parseInt(trackingCode.replace('YH38-', ''));
+
+    if (isNaN(repairId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Code de suivi invalide'
+      });
+    }
+
+    const result = await pool.query(`
+      SELECT r.*, c.name as client_name, c.email, c.phone,
+             a.appointment_date, a.appointment_time, a.status as appointment_status,
+             a.notes as appointment_notes
+      FROM repairs r
+      JOIN clients c ON r.client_id = c.id
+      LEFT JOIN appointments a ON r.id = a.repair_id
+      WHERE r.id = $1
+    `, [repairId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Ticket de réparation non trouvé'
+      });
+    }
+
+    const repair = result.rows[0];
+
+    // Status mapping to French
+    const statusMap = {
+      'pending': 'En attente',
+      'in_progress': 'En cours de réparation',
+      'fixed': 'Réparé',
+      'ready_for_pickup': 'Prêt pour récupération'
+    };
+
+    res.json({
+      success: true,
+      repair: {
+        id: repair.id,
+        tracking_code: `YH38-${repair.id.toString().padStart(6, '0')}`,
+        status: repair.status,
+        status_french: statusMap[repair.status] || repair.status,
+        device_type: repair.device_type,
+        device_model: repair.device_model,
+        issue_description: repair.issue_description,
+        priority: repair.priority,
+        estimated_cost: repair.estimated_cost,
+        actual_cost: repair.actual_cost,
+        created_at: repair.created_at,
+        updated_at: repair.updated_at,
+        client: {
+          name: repair.client_name,
+          email: repair.email,
+          phone: repair.phone
+        },
+        appointment: repair.appointment_date ? {
+          date: repair.appointment_date,
+          time: repair.appointment_time,
+          status: repair.appointment_status,
+          notes: repair.appointment_notes
+        } : null
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching repair:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération du statut de réparation'
+    });
+  }
+});
+
+export default router;
