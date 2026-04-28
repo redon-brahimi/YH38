@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import Layout from '../components/Layout';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const BookingSystem = () => {
   const [trackingCode, setTrackingCode] = useState('');
+  const { authFetch, user } = useAuth();
   const [repair, setRepair] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState('');
@@ -36,6 +37,11 @@ const BookingSystem = () => {
 
       if (data.success) {
         setRepair(data.repair);
+        // Optional: Check if the logged-in user owns this repair
+        if (user && data.repair.client.email !== user.email) {
+          toast.error("Ce ticket de réparation ne vous appartient pas.");
+          // You might want to clear the repair state here
+        }
         setBookingStep(2);
         toast.success('Réparation trouvée');
       } else {
@@ -102,15 +108,27 @@ const BookingSystem = () => {
 
     setLoading(true);
     try {
-      // In a real implementation, this would call an API to create the appointment
-      // For now, we'll simulate success
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API call
+      const response = await authFetch('http://localhost:4000/api/appointments', {
+        method: 'POST',
+        body: JSON.stringify({
+          repair_id: repair.id,
+          appointment_date: selectedDate.toISOString().split('T')[0], // YYYY-MM-DD
+          appointment_time: selectedTime,
+          notes: notes,
+        }),
+      });
 
-      toast.success('Rendez-vous programmé avec succès !');
-      setBookingStep(3);
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Rendez-vous programmé avec succès !');
+        setBookingStep(3);
+      } else {
+        toast.error(data.error || 'Erreur lors de la programmation du rendez-vous');
+      }
     } catch (error) {
       console.error('Error booking appointment:', error);
-      toast.error('Erreur lors de la programmation du rendez-vous');
+      toast.error('Erreur de connexion lors de la programmation.');
     } finally {
       setLoading(false);
     }
@@ -264,6 +282,7 @@ const BookingSystem = () => {
                     🕐 {timeSlots.find(slot => slot.value === selectedTime)?.label}
                   </div>
                 </div>
+                {!user && <p className="text-sm text-warning-700 mt-2">Vous devez être connecté pour confirmer un rendez-vous.</p>}
                 <Button
                   onClick={handleBooking}
                   disabled={loading}
@@ -333,7 +352,6 @@ const BookingSystem = () => {
   };
 
   return (
-    <Layout>
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Subtle decorative background blob */}
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[400px] bg-primary-50/60 rounded-full blur-3xl -z-10 pointer-events-none"></div>
@@ -347,7 +365,6 @@ const BookingSystem = () => {
 
         {renderStepContent()}
       </div>
-    </Layout>
   );
 };
 

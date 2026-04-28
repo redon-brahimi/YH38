@@ -8,6 +8,8 @@ const { Pool } = pkg;
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import repairRoutes from './routes/repairs.js';
+import authRoutes from './routes/auth.js';
+import appointmentRoutes from './routes/appointments.js';
 
 dotenv.config();
 
@@ -15,7 +17,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 4000;
 
 // Database connection
 const pool = new Pool({
@@ -53,10 +54,12 @@ async function initializeDatabase() {
     // Import models
     const { Client } = await import('./models/Client.js');
     const { Repair } = await import('./models/Repair.js');
+    const { Admin } = await import('./models/Admin.js');
     const { Appointment } = await import('./models/Appointment.js');
 
     // Create tables
     await pool.query(Client.createTableQuery);
+    await pool.query(Admin.createTableQuery);
     await pool.query(Repair.createTableQuery);
     await pool.query(Appointment.createTableQuery);
 
@@ -72,7 +75,9 @@ app.get('/api/health', (req, res) => {
 });
 
 // API routes
+app.use('/api/auth', authRoutes);
 app.use('/api/repairs', repairRoutes);
+app.use('/api/appointments', appointmentRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -84,6 +89,8 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
 });
+
+const PORT = process.env.PORT || 4000;
 
 // Initialize database and start server
 initializeDatabase().then(() => {

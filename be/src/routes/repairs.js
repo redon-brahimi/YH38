@@ -1,5 +1,6 @@
 import express from 'express';
 import pkg from 'pg';
+import { protect } from '../auth.js';
 const { Pool } = pkg;
 
 const router = express.Router();
@@ -9,42 +10,29 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// POST /api/repairs - Create a new repair ticket
-router.post('/', async (req, res) => {
+// POST /api/repairs - Create a new repair ticket (Protected Route)
+router.post('/', protect, async (req, res) => {
   try {
+    // User ID is from the token after passing through `protect` middleware
+    const clientId = req.user.id;
+    const userType = req.user.type;
+
+    if (userType !== 'client') {
+        return res.status(403).json({ success: false, error: 'Only clients can create repair tickets.' });
+    }
+
     const {
-      client_name,
-      client_email,
-      client_phone,
       device_type,
       device_model,
       issue_description,
       priority = 'normal'
     } = req.body;
 
-    // Validate required fields
-    if (!client_name || !client_email || !device_type || !device_model || !issue_description) {
+    if (!device_type || !device_model || !issue_description) {
       return res.status(400).json({
         success: false,
         error: 'Tous les champs requis doivent être remplis'
       });
-    }
-
-    // Create or find client
-    let clientResult = await pool.query(
-      'SELECT id FROM clients WHERE email = $1',
-      [client_email]
-    );
-
-    let clientId;
-    if (clientResult.rows.length === 0) {
-      const newClient = await pool.query(
-        'INSERT INTO clients (name, email, phone) VALUES ($1, $2, $3) RETURNING id',
-        [client_name, client_email, client_phone]
-      );
-      clientId = newClient.rows[0].id;
-    } else {
-      clientId = clientResult.rows[0].id;
     }
 
     // Create repair

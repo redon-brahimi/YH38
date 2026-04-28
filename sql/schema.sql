@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS clients (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     phone VARCHAR(50),
+    password VARCHAR(255) NOT NULL,
+    reset_password_token VARCHAR(255),
+    reset_password_expires TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -80,6 +83,24 @@ CREATE INDEX IF NOT EXISTS idx_appointments_client_id ON appointments(client_id)
 CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date);
 CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
 CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at);
+
+-- ================================================
+-- ADMINS TABLE
+-- ================================================
+-- Stores admin/worker user information
+CREATE TABLE IF NOT EXISTS admins (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    reset_password_token VARCHAR(255),
+    reset_password_expires TIMESTAMP,
+    role VARCHAR(50) DEFAULT 'admin' CHECK (role IN ('admin', 'technician')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add index on email for faster lookups
+CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
 
 -- ================================================
 -- VIEWS (Optional)
