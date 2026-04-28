@@ -165,26 +165,26 @@ const RepairForm = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     type="button"
-                    onClick={() => updateFormData('device_type', 'phone')}
-                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
+                    onClick={() => { updateFormData('device_type', 'phone'); if(errors.device_type) setErrors(p => ({...p, device_type: ''})); }}
+                    className={`p-6 border-2 rounded-2xl text-center transition-all duration-200 transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
                       formData.device_type === 'phone'
-                        ? 'border-primary-500 bg-primary-50 text-primary-700'
-                        : 'border-neutral-300 hover:border-primary-300'
+                        ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md ring-1 ring-primary-500'
+                        : 'border-neutral-200 bg-white hover:border-primary-300 hover:shadow-sm'
                     }`}
                   >
-                    <div className="text-3xl mb-2">📱</div>
+                    <div className="text-5xl mb-3">📱</div>
                     <div className="font-medium">Téléphone</div>
                   </button>
                   <button
                     type="button"
-                    onClick={() => updateFormData('device_type', 'pc')}
-                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
+                    onClick={() => { updateFormData('device_type', 'pc'); if(errors.device_type) setErrors(p => ({...p, device_type: ''})); }}
+                    className={`p-6 border-2 rounded-2xl text-center transition-all duration-200 transform hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
                       formData.device_type === 'pc'
-                        ? 'border-primary-500 bg-primary-50 text-primary-700'
-                        : 'border-neutral-300 hover:border-primary-300'
+                        ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md ring-1 ring-primary-500'
+                        : 'border-neutral-200 bg-white hover:border-primary-300 hover:shadow-sm'
                     }`}
                   >
-                    <div className="text-3xl mb-2">💻</div>
+                    <div className="text-5xl mb-3">💻</div>
                     <div className="font-medium">Ordinateur</div>
                   </button>
                 </div>
@@ -235,18 +235,18 @@ const RepairForm = () => {
                 <label className="block text-sm font-medium text-neutral-700 mb-2">
                   Priorité
                 </label>
-                <div className="flex gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
                     { value: 'low', label: 'Faible', desc: 'Pas urgent' },
                     { value: 'normal', label: 'Normal', desc: 'Délai standard' },
                     { value: 'high', label: 'Élevé', desc: 'Assez urgent' },
                     { value: 'urgent', label: 'Urgent', desc: 'Très urgent' }
                   ].map((priority) => (
-                    <button
+                    <button //
                       key={priority.value}
                       type="button"
                       onClick={() => updateFormData('priority', priority.value)}
-                      className={`p-3 border-2 rounded-lg text-center transition-colors ${
+                      className={`p-3 border-2 rounded-xl text-center transition-all duration-200 min-h-11 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
                         formData.priority === priority.value
                           ? 'border-primary-500 bg-primary-50 text-primary-700'
                           : 'border-neutral-300 hover:border-primary-300'
@@ -272,30 +272,31 @@ const RepairForm = () => {
 
             <div className="card">
               <h3 className="text-lg font-semibold mb-4">Récapitulatif</h3>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-neutral-600">Client:</span>
                   <span className="font-medium">{formData.client_name}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-600">Email:</span>
-                  <span className="font-medium">{formData.client_email}</span>
+                  <span className="font-medium break-all">{formData.client_email}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-600">Téléphone:</span>
                   <span className="font-medium">{formData.client_phone}</span>
                 </div>
+                <div className="border-t border-neutral-200/80 my-3"></div>
                 <div className="flex justify-between">
                   <span className="text-neutral-600">Appareil:</span>
                   <span className="font-medium">{formData.device_type === 'phone' ? 'Téléphone' : 'Ordinateur'} {formData.device_model}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-600">Priorité:</span>
-                  <span className="font-medium capitalize">{formData.priority}</span>
+                  <span className="font-medium capitalize bg-primary-50 text-primary-700 px-2 py-0.5 rounded-md text-sm">{formData.priority}</span>
                 </div>
-                <div className="border-t pt-3">
+                <div className="border-t border-neutral-200/80 pt-4">
                   <div className="text-neutral-600 mb-2">Problème:</div>
-                  <p className="text-sm bg-neutral-50 p-3 rounded">{formData.issue_description}</p>
+                  <p className="text-sm bg-neutral-50 p-3 rounded-lg border border-neutral-200/80">{formData.issue_description}</p>
                 </div>
               </div>
             </div>
@@ -305,15 +306,15 @@ const RepairForm = () => {
       case 5:
         return (
           <div className="text-center space-y-6">
-            <div className="text-6xl mb-4">✅</div>
+            <div className="text-7xl mb-4 animate-bounce">✅</div>
             <h2 className="text-2xl font-bold text-success-700 mb-2">Ticket Créé avec Succès !</h2>
             <p className="text-neutral-600 mb-6">
               Votre ticket de réparation a été enregistré. Conservez précieusement ce code de suivi.
             </p>
 
-            <div className="card inline-block">
+            <div className="card inline-block bg-success-50/50 border-success-200">
               <div className="text-sm text-neutral-600 mb-2">Code de suivi</div>
-              <div className="text-2xl font-bold text-primary-600 font-mono">
+              <div className="text-2xl md:text-3xl font-bold text-success-800 font-mono bg-white px-4 py-2 rounded-lg border-2 border-dashed border-success-300">
                 {trackingCode}
               </div>
             </div>
@@ -341,7 +342,10 @@ const RepairForm = () => {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Subtle decorative background blob */}
+        <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[400px] bg-primary-50/60 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+
         {currentStep < 5 && (
           <Breadcrumbs steps={steps} currentStep={currentStep} />
         )}

@@ -54,36 +54,20 @@ function App() {
 
   return (
     <Layout>
-      {/* Breadcrumbs */}
-      <nav className="bg-neutral-50 border-b border-neutral-200" aria-label="Fil d'ariane">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <ol className="flex items-center gap-2 text-sm">
-            <li>
-              <a href="/" className="text-primary-600 hover:text-primary-700 font-medium">
-                Accueil
-              </a>
-            </li>
-            <li className="text-neutral-600">/</li>
-            <li className="text-neutral-900 font-medium" aria-current="page">
-              YH38 - Réparation Express
-            </li>
-          </ol>
-        </div>
-      </nav>
-
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-secondary-800 to-secondary-900 text-white py-16 md:py-24 pt-20 md:pt-32">
+      <section className="relative bg-white pt-16 md:pt-24 pb-20 md:pb-28">
+        <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-primary-50 -z-10"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-              YH38 - Réparation Express
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-secondary-900 mb-6 leading-tight">
+              EspaceCall - Réparation Express
             </h1>
             
-            <p className="text-lg md:text-xl mb-4 text-neutral-100 max-w-3xl mx-auto">
+            <p className="text-lg md:text-xl mb-4 text-secondary-700 max-w-3xl mx-auto">
               Service professionnel de réparation de téléphones et ordinateurs
             </p>
             
-            <p className="text-base md:text-lg mb-10 text-neutral-200 max-w-3xl mx-auto font-light">
+            <p className="text-base md:text-lg mb-10 text-secondary-600 max-w-3xl mx-auto">
               Diagnostic rapide, réparation de qualité et suivi en temps réel. 
               Apportez votre appareil ou prenez rendez-vous en ligne.
             </p>
@@ -92,7 +76,6 @@ function App() {
               <Button 
                 size="large" 
                 onClick={() => window.location.href = '/repair'}
-                className="bg-primary-600 hover:bg-primary-700 text-white"
               >
                 Nouvelle Réparation
               </Button>
@@ -100,7 +83,7 @@ function App() {
                 variant="outline" 
                 size="large" 
                 onClick={() => window.location.href = '/track'}
-                className="border-2 border-white text-white hover:bg-white hover:text-secondary-900"
+                className="transition-transform transform hover:scale-105"
               >
                 Suivre ma Réparation
               </Button>
@@ -110,7 +93,7 @@ function App() {
       </section>
 
       {/* Services Section */}
-      <section className="py-16 md:py-20 bg-white">
+      <section className="py-16 md:py-20 bg-primary-50/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-secondary-900 mb-4">
@@ -126,9 +109,11 @@ function App() {
             {services.map((service, index) => (
               <div 
                 key={index}
-                className="card hover:shadow-lg transition-shadow duration-300 focus-within:ring-2 focus-within:ring-primary-500"
+                className="card text-center hover:shadow-lg transition-shadow duration-300 focus-within:ring-2 focus-within:ring-primary-500"
               >
-                <div className="text-5xl mb-4 text-primary-600">{service.icon}</div>
+                <div className="mx-auto w-16 h-16 mb-6 flex items-center justify-center bg-primary-100 rounded-full text-3xl">
+                  {service.icon}
+                </div>
                 <h3 className="text-xl font-bold text-secondary-900 mb-3">
                   {service.title}
                 </h3>
@@ -142,7 +127,7 @@ function App() {
       </section>
 
       {/* How it Works Section */}
-      <section className="py-16 md:py-20 bg-neutral-50">
+      <section className="py-16 md:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-secondary-900 mb-4">
@@ -154,20 +139,16 @@ function App() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="hidden lg:block absolute top-1/2 left-0 w-full h-0.5 bg-neutral-200 -translate-y-1/2 -z-10"></div>
             {steps.map((step, index) => (
               <div 
                 key={step.number}
-                className="card bg-white hover:shadow-lg transition-shadow duration-300"
+                className="card bg-white hover:shadow-lg transition-shadow duration-300 text-center"
               >
                 {/* Step Number Circle */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold text-lg min-h-11 min-w-11">
-                    {step.number}
-                  </div>
-                  {index < steps.length - 1 && (
-                    <div className="hidden lg:block h-0.5 flex-grow mx-2 bg-primary-200"></div>
-                  )}
+                <div className="relative w-16 h-16 mx-auto mb-6 rounded-full bg-primary-600 text-white flex items-center justify-center font-bold text-xl min-h-11 min-w-11 z-10">
+                  {step.number}
                 </div>
 
                 {/* Icon */}
@@ -196,17 +177,17 @@ function App() {
       </section>
 
       {/* Key Features Section */}
-      <section className="py-16 md:py-20 bg-white">
+      <section className="py-16 md:py-20 bg-primary-50/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
-              { icon: '⏱️', title: 'Rapide', desc: '24-48h turnaround' },
-              { icon: '✨', title: 'Qualité', desc: 'Pièces authentiques' },
-              { icon: '🛡️', title: 'Sécurisé', desc: 'Données protégées' },
+              { icon: '⏱️', title: 'Rapide', desc: 'Réparation en 24-48h' },
+              { icon: '✨', title: 'Qualité', desc: 'Pièces d\'origine garanties' },
+              { icon: '🛡️', title: 'Sécurisé', desc: 'Vos données sont protégées' },
               { icon: '💬', title: 'Support', desc: 'Suivi en temps réel' }
             ].map((feature, index) => (
-              <div key={index} className="text-center p-6">
-                <div className="text-4xl mb-3">{feature.icon}</div>
+              <div key={index} className="text-center p-6 bg-white rounded-2xl shadow-sm border border-neutral-200/80">
+                <div className="text-4xl mb-4">{feature.icon}</div>
                 <h3 className="font-bold text-secondary-900 mb-2">{feature.title}</h3>
                 <p className="text-neutral-600 text-sm">{feature.desc}</p>
               </div>
@@ -216,7 +197,7 @@ function App() {
       </section>
 
       {/* CTA Section */}
-      <section className="bg-primary-600 text-white py-16 md:py-20">
+      <section className="bg-secondary-800 text-white py-16 md:py-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
             Prêt à réparer votre appareil ?
@@ -228,14 +209,14 @@ function App() {
             <Button 
               size="large" 
               onClick={() => window.location.href = '/repair'}
-              className="bg-white text-primary-600 hover:bg-neutral-50"
+              className="bg-primary-600 hover:bg-primary-700"
             >
               Créer un Ticket
             </Button>
             <Button 
               size="large" 
               onClick={() => window.location.href = '/booking'}
-              className="border-2 border-white text-white hover:bg-white hover:text-primary-600"
+              className="bg-white text-secondary-800 hover:bg-neutral-100"
             >
               Prendre Rendez-vous
             </Button>
@@ -244,7 +225,7 @@ function App() {
       </section>
 
       {/* FAQ / Support Section */}
-      <section className="py-16 md:py-20 bg-neutral-50">
+      <section className="py-16 md:py-20 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-secondary-900 text-center mb-12">
             Questions Fréquentes

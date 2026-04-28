@@ -10,14 +10,14 @@ const Button = ({
   className = '',
   ...props
 }) => {
-  const baseClasses = 'btn focus:ring-2 focus:ring-offset-2 transition-colors duration-200 inline-flex items-center justify-center font-medium rounded-md shadow-sm';
+  const baseClasses = 'focus:ring-2 focus:ring-offset-2 transition-all duration-200 inline-flex items-center justify-center font-medium rounded-xl shadow-sm transform hover:-translate-y-0.5 focus:outline-none';
 
   const variantClasses = {
-    primary: 'btn-primary',
-    secondary: 'btn-secondary',
-    success: 'btn-success',
-    error: 'btn-error',
-    outline: 'border-neutral-300 text-neutral-700 bg-white hover:bg-neutral-50 focus:ring-neutral-500'
+    primary: 'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500',
+    secondary: 'bg-secondary-600 text-white hover:bg-secondary-700 focus:ring-secondary-500',
+    success: 'bg-success-600 text-white hover:bg-success-700 focus:ring-success-500',
+    error: 'bg-error-600 text-white hover:bg-error-700 focus:ring-error-500',
+    outline: 'border-2 border-neutral-300 text-neutral-700 bg-white hover:bg-neutral-50 focus:ring-primary-500'
   };
 
   const sizeClasses = {
