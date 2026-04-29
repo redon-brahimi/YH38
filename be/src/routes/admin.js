@@ -343,21 +343,29 @@ router.get('/parts/by-device/:device_id', async (req, res) => {
 // PUT /api/admin/parts/:id/stock - Update stock quantity for a part
 router.put('/parts/:id/stock', async (req, res) => {
   const { id } = req.params;
-  const { stock_quantity } = req.body;
+  const { quantity_change } = req.body; // Expecting a change amount, not absolute quantity
 
-  if (stock_quantity === undefined || stock_quantity < 0) {
-    return res.status(400).json({ success: false, error: 'Valid stock quantity is required.' });
+  if (quantity_change === undefined || !Number.isInteger(quantity_change)) {
+    return res.status(400).json({ success: false, error: 'A valid integer quantity_change is required.' });
   }
 
   try {
-    const result = await pool.query(
-      'UPDATE parts SET stock_quantity = $1 WHERE id = $2 RETURNING *',
-      [stock_quantity, id]
-    );
-
-    if (result.rows.length === 0) {
+    // First, get the current stock to validate against negative results
+    const currentStockResult = await pool.query('SELECT stock_quantity FROM parts WHERE id = $1', [id]);
+    if (currentStockResult.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Part not found.' });
     }
+    const currentStock = currentStockResult.rows[0].stock_quantity;
+    const newCalculatedStock = currentStock + quantity_change;
+
+    if (newCalculatedStock < 0) {
+      return res.status(400).json({ success: false, error: 'Stock cannot go below zero.' });
+    }
+
+    const result = await pool.query(
+      'UPDATE parts SET stock_quantity = stock_quantity + $1 WHERE id = $2 RETURNING *',
+      [quantity_change, id]
+    );
 
     res.json({ success: true, part: result.rows[0] });
   } catch (error) {

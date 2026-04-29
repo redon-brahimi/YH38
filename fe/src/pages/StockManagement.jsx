@@ -19,6 +19,8 @@ const StockManagement = () => {
       const data = await response.json();
       if (data.success) {
         setParts(data.parts);
+        // Initialize a change amount state for each part, defaulting to 0
+        setParts(data.parts.map(p => ({ ...p, _changeAmount: 0 })));
       } else {
         toast.error(data.error || 'Failed to fetch parts.');
       }
@@ -33,20 +35,20 @@ const StockManagement = () => {
     fetchParts();
   }, [fetchParts]);
 
-  const handleStockUpdate = async (partId, newQuantity) => {
-    if (newQuantity < 0) return;
+  const handleStockUpdate = async (partId, changeAmount) => {
+    if (changeAmount === 0) return; // No change to apply
 
     try {
-      const response = await authFetch(`http://localhost:4000/api/admin/parts/${partId}/stock`, {
+      const response = await authFetch(`http://localhost:4000/api/admin/parts/${partId}/stock`, { // Backend expects quantity_change
         method: 'PUT',
-        body: JSON.stringify({ stock_quantity: newQuantity }),
+        body: JSON.stringify({ quantity_change: changeAmount }),
       });
       const data = await response.json();
 
       if (data.success) {
         toast.success('Stock mis à jour.');
         setParts(prevParts =>
-          prevParts.map(p => (p.id === partId ? { ...p, stock_quantity: newQuantity } : p))
+          prevParts.map(p => (p.id === partId ? { ...p, stock_quantity: data.part.stock_quantity, _changeAmount: 0 } : p))
         );
       } else {
         toast.error(data.error || 'Failed to update stock.');
@@ -56,6 +58,16 @@ const StockManagement = () => {
     }
   };
 
+  // Handler for changing the value in the input field for a specific part
+  const handleEditedQuantityChange = (partId, value) => { // This now updates the change amount
+    setParts(prevParts =>
+      prevParts.map(p =>
+        p.id === partId ? { ...p, _changeAmount: parseInt(value, 10) || 0 } : p
+      )
+    );
+  };
+
+  // Memoized filtered parts for efficient rendering
   const filteredParts = useMemo(() => {
     return parts.filter(part => {
       const matchesType = deviceTypeFilter === 'all' || part.device_type === deviceTypeFilter;
@@ -138,24 +150,22 @@ const StockManagement = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">                        
+                        <Input
+                          type="number"
+                          value={part._changeAmount} // Display the change amount
+                          onChange={(e) => handleEditedQuantityChange(part.id, e.target.value)}
+                          className="w-24 text-center"
+                          name={`stock-change-input-${part.id}`} // Unique name for each input
+                          placeholder="+/-"
+                        />
                         <Button
-                          size="small"
-                          variant="outline"
-                          onClick={() => handleStockUpdate(part.id, part.stock_quantity - 1)}
-                          aria-label={`Diminuer le stock de ${part.name}`}
-                          className="min-w-11 min-h-11"
+                          size="small"                          
+                          onClick={() => handleStockUpdate(part.id, part._changeAmount)}
+                          disabled={part._changeAmount === 0} // Disable if no change
+                          aria-label={`Appliquer le changement de stock de ${part._changeAmount} pour ${part.name}`}
                         >
-                          -
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="outline"
-                          onClick={() => handleStockUpdate(part.id, part.stock_quantity + 1)}
-                          aria-label={`Augmenter le stock de ${part.name}`}
-                          className="min-w-11 min-h-11"
-                        >
-                          +
+                          Mettre à jour
                         </Button>
                       </div>
                     </td>
