@@ -21,4 +21,19 @@ export class Part {
       )
     `;
   }
+
+  // Static method to safely decrement stock
+  static async decrementStock(client, partId) {
+    const query = `
+      UPDATE parts 
+      SET stock_quantity = stock_quantity - 1 
+      WHERE id = $1 AND stock_quantity > 0
+      RETURNING *;
+    `;
+    const res = await client.query(query, [partId]);
+    if (res.rowCount === 0) {
+      throw new Error("Stock insuffisant ou pièce introuvable.");
+    }
+    return res.rows[0];
+  }
 }

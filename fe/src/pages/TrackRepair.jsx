@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext.jsx';
 import Button from '@/components/Button.jsx';
+import Modal from '@/components/Modal.jsx'; // Assuming you have a Modal component
 import Input from '@/components/Input.jsx';
 import toast from 'react-hot-toast';
 
@@ -10,11 +11,9 @@ const TrackRepair = () => {
   const [repair, setRepair] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editableData, setEditableData] = useState({
-    status: '',
-    estimated_cost: '',
-    actual_cost: '',
-  });
+  const [isPartModalOpen, setIsPartModalOpen] = useState(false);
+  const [partsForDevice, setPartsForDevice] = useState([]);
+  const [selectedStatus, setSelectedStatus] = useState('');
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -25,7 +24,7 @@ const TrackRepair = () => {
     }
   }, []);
 
-  const handleFindRepair = async (code = trackingCode) => {
+  const handleFindRepair = useCallback(async (code = trackingCode) => {
     if (!code.trim()) {
       toast.error('Veuillez saisir un code de suivi');
       return;
@@ -34,48 +33,72 @@ const TrackRepair = () => {
     setRepair(null);
     setIsEditing(false);
     try {
-      const response = await fetch(`http://localhost:4000/api/repairs/${code.toUpperCase()}`);
-      const data = await response.json();
-      if (data.success) {
-        setRepair(data.repair);
-        setEditableData({
-          status: data.repair.status,
-          estimated_cost: data.repair.estimated_cost || '',
-          actual_cost: data.repair.actual_cost || '',
+      const repairResponse = await fetch(`http://localhost:4000/api/repairs/${code.toUpperCase()}`);
+      const repairData = await repairResponse.json();
+
+      if (repairData.success) {
+        const currentRepair = repairData.repair;
+        setRepair(currentRepair);
+        setSelectedStatus(currentRepair.status);
+
+        // Ensure client and appointment objects exist, even if null from backend
+        setRepair({
+          ...currentRepair,
+          client: currentRepair.client || {},
+          appointment: currentRepair.appointment || null,
         });
+
+        if (currentRepair.device_id) {
+          const partsResponse = await authFetch(`http://localhost:4000/api/admin/parts/by-device/${currentRepair.device_id}`);
+          const partsData = await partsResponse.json();
+          if (partsData.success) {
+            setPartsForDevice(partsData.parts);
+          }
+        }
+
         toast.success('Réparation trouvée !');
       } else {
-        toast.error(data.error || 'Ticket de réparation non trouvé.');
+        console.error("Backend reported error:", repairData.error);
+        toast.error(repairData.error || 'Ticket de réparation non trouvé.');
       }
     } catch (error) {
-      toast.error('Erreur de connexion au serveur.');
+      console.error("Error in handleFindRepair:", error);
+      toast.error(`Erreur lors de la récupération de la réparation: ${error.message}`);
     } finally {
       setLoading(false);
     }
+  }, [authFetch]);
+
+  const handleSave = () => {
+    // If status is being set to 'fixed' and there are parts available, prompt the user to select one.
+    if (selectedStatus === 'fixed' && user?.type === 'admin' && partsForDevice.length > 0) {
+      setIsPartModalOpen(true);
+      return;
+    }
+    // Otherwise, proceed with saving.
+    executeSave(null);
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setEditableData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSave = async () => {
+  const executeSave = async (partIdOverride = null) => {
     setLoading(true);
+    setIsPartModalOpen(false); // Close modal if it was open
     try {
+      const payload = { status: selectedStatus };
+
+      // Only add part_id to payload if the status is 'fixed' and a part was selected
+      if (selectedStatus === 'fixed' && partIdOverride) {
+        payload.part_id = partIdOverride;
+      }
+
       const response = await authFetch(`http://localhost:4000/api/admin/repairs/${repair.id}`, {
         method: 'PUT',
-        body: JSON.stringify({
-          status: editableData.status,
-          estimated_cost: editableData.estimated_cost === '' ? null : editableData.estimated_cost,
-          actual_cost: editableData.actual_cost === '' ? null : editableData.actual_cost,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
 
       if (data.success) {
         toast.success('Détails de la réparation mis à jour.');
         setIsEditing(false);
-        // Update local state to show changes immediately
         setRepair(data.repair);
       } else {
         toast.error(data.error || 'Échec de la mise à jour.');
@@ -87,35 +110,20 @@ const TrackRepair = () => {
     }
   };
 
+
   const renderAdminEditSection = () => (
     <div className="mt-6 border-t-2 border-dashed pt-6">
       <h3 className="text-lg font-semibold text-secondary-800 mb-4">Modifier la Réparation</h3>
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-neutral-700">Statut</label>
-          <select name="status" value={editableData.status} onChange={handleInputChange} className="input-field">
+          <label htmlFor="status" className="block text-sm font-medium text-neutral-700 mb-1">Statut</label>
+          <select id="status" name="status" value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="input-field">
             <option value="pending">En attente</option>
             <option value="in_progress">En cours</option>
             <option value="fixed">Réparé</option>
             <option value="ready_for_pickup">Prêt pour récupération</option>
           </select>
         </div>
-        <Input
-          label="Coût Estimé (€)"
-          name="estimated_cost"
-          type="number"
-          placeholder="150.00"
-          value={editableData.estimated_cost}
-          onChange={handleInputChange}
-        />
-        <Input
-          label="Coût Réel (€)"
-          name="actual_cost"
-          type="number"
-          placeholder="145.50"
-          value={editableData.actual_cost}
-          onChange={handleInputChange}
-        />
       </div>
       <div className="flex gap-4 mt-6">
         <Button onClick={handleSave} disabled={loading}>{loading ? 'Sauvegarde...' : 'Sauvegarder'}</Button>
@@ -125,6 +133,7 @@ const TrackRepair = () => {
   );
 
   const renderRepairDetails = () => (
+    // console.log("Rendering repair details for:", repair), // Removed debugging log
     <div className="space-y-4">
       <div className="flex justify-between">
         <span className="text-neutral-600">Code de suivi:</span>
@@ -146,15 +155,6 @@ const TrackRepair = () => {
       <div>
         <span className="text-neutral-600 block mb-2">Description du problème:</span>
         <p className="text-sm bg-neutral-50 p-3 rounded-lg border">{repair.issue_description}</p>
-      </div>
-      <div className="border-t my-3"></div>
-      <div className="flex justify-between">
-        <span className="text-neutral-600">Coût Estimé:</span>
-        <span className="font-medium">{repair.estimated_cost ? `${repair.estimated_cost} €` : 'N/A'}</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-neutral-600">Coût Réel:</span>
-        <span className="font-medium">{repair.actual_cost ? `${repair.actual_cost} €` : 'N/A'}</span>
       </div>
       <div className="border-t my-3"></div>
       <div className="flex justify-between">
@@ -236,8 +236,51 @@ const TrackRepair = () => {
           )}
         </div>
       )}
+
+      {/* Part Selection Modal */}
+      <PartSelectionModal
+        show={isPartModalOpen}
+        onClose={() => setIsPartModalOpen(false)}
+        parts={partsForDevice}
+        deviceName={repair?.device_model}
+        onConfirm={(selectedPartId) => {
+          executeSave(selectedPartId);
+        }}
+      />
     </div>
   );
 };
+
+const PartSelectionModal = ({ show, onClose, onConfirm, parts, deviceName }) => {
+  const [selectedPart, setSelectedPart] = useState('');
+
+  const handleConfirm = () => {
+    if (!selectedPart) {
+      toast.error("Veuillez sélectionner une pièce.");
+      return;
+    }
+    onConfirm(selectedPart);
+  };
+
+  return (
+    <Modal show={show} onClose={onClose} title={`Sélectionner la pièce utilisée pour ${deviceName}`}>
+      <div className="space-y-4">
+        <p className="text-neutral-600">Quelle pièce a été utilisée pour réparer le {deviceName} ?</p>
+        <select
+          value={selectedPart}
+          onChange={(e) => setSelectedPart(e.target.value)}
+          className="input-field w-full"
+        >
+          <option value="">Sélectionner une pièce</option>
+          {parts.map(part => (
+            <option key={part.id} value={part.id}>{part.name} (Stock: {part.stock_quantity})</option>
+          ))}
+        </select>
+        <Button onClick={handleConfirm} className="w-full mt-4">Confirmer et Mettre à Jour</Button>
+      </div>
+    </Modal>
+  );
+};
+
 
 export default TrackRepair;

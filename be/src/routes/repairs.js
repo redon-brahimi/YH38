@@ -10,6 +10,65 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
+// Helper function to fetch and format repair details
+export const getRepairDetailsById = async (repairId) => {
+  const result = await pool.query(`
+    SELECT r.id, r.client_id,
+           c.name as client_name, c.email as client_email, c.phone as client_phone,
+           r.device_type, r.device_model, r.issue_description,
+           r.status, r.priority, r.estimated_cost, r.actual_cost,
+           r.created_at, r.updated_at,
+           a.appointment_date, a.appointment_time, a.status as appointment_status,
+           a.notes as appointment_notes,
+           (SELECT id FROM devices WHERE name = r.device_model AND type = r.device_type) as device_id
+    FROM repairs r
+    JOIN clients c ON r.client_id = c.id
+    LEFT JOIN appointments a ON r.id = a.repair_id
+    WHERE r.id = $1
+  `, [repairId]);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  const repair = result.rows[0];
+
+  // Status mapping to French
+  const statusMap = {
+    'pending': 'En attente',
+    'in_progress': 'En cours de réparation',
+    'fixed': 'Réparé',
+    'ready_for_pickup': 'Prêt pour récupération'
+  };
+
+  return {
+    id: repair.id,
+    tracking_code: `YH38-${repair.id.toString().padStart(6, '0')}`,
+    status: repair.status,
+    status_french: statusMap[repair.status] || repair.status,
+    device_type: repair.device_type,
+    device_model: repair.device_model,
+    device_id: repair.device_id,
+    issue_description: repair.issue_description,
+    priority: repair.priority,
+    estimated_cost: repair.estimated_cost,
+    actual_cost: repair.actual_cost,
+    created_at: repair.created_at,
+    updated_at: repair.updated_at,
+    client: {
+      name: repair.client_name,
+      email: repair.client_email,
+      phone: repair.client_phone
+    },
+    appointment: repair.appointment_date ? {
+      date: repair.appointment_date,
+      time: repair.appointment_time,
+      status: repair.appointment_status,
+      notes: repair.appointment_notes
+    } : null
+  };
+};
+
 // POST /api/repairs - Create a new repair ticket
 router.post('/', protect, async (req, res) => { // Add protect middleware
   try {
@@ -80,6 +139,8 @@ router.get('/client', protect, async (req, res) => {
       SELECT r.*, c.name as client_name, c.email, c.phone,
              a.appointment_date, a.appointment_time, a.status as appointment_status,
              a.notes as appointment_notes
+             , (SELECT id FROM devices WHERE name = r.device_model AND type = r.device_type) as device_id
+             , c.name as client_name, c.email as client_email, c.phone as client_phone -- Ensure client details are selected
       FROM repairs r
       JOIN clients c ON r.client_id = c.id
       LEFT JOIN appointments a ON r.id = a.repair_id
@@ -87,39 +148,9 @@ router.get('/client', protect, async (req, res) => {
       ORDER BY r.created_at DESC
     `, [clientId]);
 
-    const repairs = result.rows.map(repair => {
-      const statusMap = {
-        'pending': 'En attente',
-        'in_progress': 'En cours de réparation',
-        'fixed': 'Réparé',
-        'ready_for_pickup': 'Prêt pour récupération'
-      };
-      return {
-        id: repair.id,
-        tracking_code: `YH38-${repair.id.toString().padStart(6, '0')}`,
-        status: repair.status,
-        status_french: statusMap[repair.status] || repair.status,
-        device_type: repair.device_type,
-        device_model: repair.device_model,
-        issue_description: repair.issue_description,
-        priority: repair.priority,
-        estimated_cost: repair.estimated_cost,
-        actual_cost: repair.actual_cost,
-        created_at: repair.created_at,
-        updated_at: repair.updated_at,
-        client: {
-          name: repair.client_name,
-          email: repair.email,
-          phone: repair.phone
-        },
-        appointment: repair.appointment_date ? {
-          date: repair.appointment_date,
-          time: repair.appointment_time,
-          status: repair.appointment_status,
-          notes: repair.appointment_notes
-        } : null
-      };
-    });
+    const repairs = await Promise.all(result.rows.map(async (repair) => {
+      return await getRepairDetailsById(repair.id);
+    })); // Added missing parenthesis here
 
     res.json({ success: true, repairs });
   } catch (error) {
@@ -154,6 +185,7 @@ router.get('/:trackingCode', async (req, res) => {
       SELECT r.*, c.name as client_name, c.email, c.phone,
              a.appointment_date, a.appointment_time, a.status as appointment_status,
              a.notes as appointment_notes
+             , (SELECT id FROM devices WHERE name = r.device_model AND type = r.device_type) as device_id
       FROM repairs r
       JOIN clients c ON r.client_id = c.id
       LEFT JOIN appointments a ON r.id = a.repair_id
@@ -167,44 +199,8 @@ router.get('/:trackingCode', async (req, res) => {
       });
     }
 
-    const repair = result.rows[0];
-
-    // Status mapping to French
-    const statusMap = {
-      'pending': 'En attente',
-      'in_progress': 'En cours de réparation',
-      'fixed': 'Réparé',
-      'ready_for_pickup': 'Prêt pour récupération'
-    };
-
-    res.json({
-      success: true,
-      repair: {
-        id: repair.id,
-        tracking_code: `YH38-${repair.id.toString().padStart(6, '0')}`,
-        status: repair.status,
-        status_french: statusMap[repair.status] || repair.status,
-        device_type: repair.device_type,
-        device_model: repair.device_model,
-        issue_description: repair.issue_description,
-        priority: repair.priority,
-        estimated_cost: repair.estimated_cost,
-        actual_cost: repair.actual_cost,
-        created_at: repair.created_at,
-        updated_at: repair.updated_at,
-        client: {
-          name: repair.client_name,
-          email: repair.email,
-          phone: repair.phone
-        },
-        appointment: repair.appointment_date ? {
-          date: repair.appointment_date,
-          time: repair.appointment_time,
-          status: repair.appointment_status,
-          notes: repair.appointment_notes
-        } : null
-      }
-    });
+    const repairDetails = await getRepairDetailsById(repairId);
+    res.json({ success: true, repair: repairDetails });
   } catch (error) {
     console.error('Error fetching repair:', error);
     res.status(500).json({

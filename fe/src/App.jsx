@@ -12,6 +12,9 @@ import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 import AdminSignup from '@/pages/AdminSignup.jsx'; // Import the new AdminSignup page
 import ClientDashboard from '@/pages/ClientDashboard.jsx';
 import AdminDashboard from '@/pages/AdminDashboard.jsx';
+import StockManagement from '@/pages/StockManagement.jsx';
+import AddDevice from '@/pages/AddDevice.jsx';
+import AddPart from '@/pages/AddPart.jsx';
 import { AuthProvider } from '@/context/AuthContext.jsx';
 import TrackRepair from '@/pages/TrackRepair.jsx';
 
@@ -36,6 +39,21 @@ function App() {
             <Route path="/admin/dashboard" element={
               <ProtectedRoute adminOnly={true}>
                 <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/stock" element={
+              <ProtectedRoute adminOnly={true}>
+                <StockManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/devices/new" element={
+              <ProtectedRoute adminOnly={true}>
+                <AddDevice />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin/parts/new" element={
+              <ProtectedRoute adminOnly={true}>
+                <AddPart />
               </ProtectedRoute>
             } />
 

@@ -15,13 +15,14 @@ services:
       - yh38-net
 
   yh38-api:
-    image: node:22.21.1
+    build:
+      context: ./be
+      dockerfile: Dockerfile
     container_name: yh38-api
-    working_dir: /app
     restart: unless-stopped
     volumes:
       - ./be:/app
-    command: sh -c "npm install && npm start"
+      - /app/node_modules
     environment:
       PORT: "4000"
       PGHOST: "yh38-db"
@@ -43,13 +44,14 @@ services:
       - yh38-net
 
   yh38-fe:
-    image: node:22.21.1
+    build:
+      context: ./fe
+      dockerfile: Dockerfile
     container_name: yh38-fe
-    working_dir: /app
     restart: unless-stopped
     volumes:
       - ./fe:/app
-    command: sh -c "npm install && npm run dev"
+      - /app/node_modules
     environment:
       VITE_API_BASE_URL: "http://localhost:4000/api"
     ports:

@@ -32,9 +32,15 @@ const AdminDashboard = () => {
 
   const handleStatusChange = async (repairId, newStatus) => {
     try {
-      const response = await authFetch(`http://localhost:4000/api/admin/repairs/${repairId}/status`, {
+      // For this simplified example, we assume no part is used.
+      // A modal would be needed to ask for a part_id if status is 'fixed'.
+      const payload = { status: newStatus };
+      if (newStatus === 'fixed') {
+        toast('Veuillez sélectionner une pièce depuis la page de détails de la réparation pour déduire le stock.', { icon: 'ℹ️' });
+      }
+      const response = await authFetch(`http://localhost:4000/api/admin/repairs/${repairId}`, {
         method: 'PUT',
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
 
