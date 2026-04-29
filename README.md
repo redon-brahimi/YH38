@@ -43,12 +43,11 @@ EspaceCall est une application web full-stack conçue pour gérer efficacement l
 ## Base de Données
 
 Le schéma complet de la base de données se trouve dans le dossier `sql/` :
-
 - **`sql/schema.sql`** - Schéma complet avec tables, index, vues et fonctions
-- **`sql/README.md`** - Documentation détaillée du schéma
 
 ### Tables Principales
 - **clients** - Informations clients (nom, email, téléphone)
+- **admins** - Informations pour les administrateurs/techniciens
 - **repairs** - Tickets de réparation avec statut et priorité
 - **appointments** - Rendez-vous programmés
 

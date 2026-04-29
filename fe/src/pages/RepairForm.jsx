@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
-import Layout from '../components/Layout';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Breadcrumbs from '../components/Breadcrumbs';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext'; // Import useAuth
 
 const RepairForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
+  const { user, authFetch } = useAuth(); // Use authFetch for protected routes
   const [formData, setFormData] = useState({
-    client_name: '',
-    client_email: '',
-    client_phone: '',
     device_type: '',
     device_model: '',
     issue_description: '',
@@ -21,10 +19,9 @@ const RepairForm = () => {
   const [trackingCode, setTrackingCode] = useState(null);
 
   const steps = [
-    { id: 1, title: 'Informations Client', description: 'Vos coordonnées' },
-    { id: 2, title: 'Appareil', description: 'Type et modèle' },
-    { id: 3, title: 'Problème', description: 'Description du problème' },
-    { id: 4, title: 'Confirmation', description: 'Vérification et envoi' }
+    { id: 1, title: 'Appareil', description: 'Type et modèle' },
+    { id: 2, title: 'Problème', description: 'Description du problème' },
+    { id: 3, title: 'Confirmation', description: 'Vérification et envoi' }
   ];
 
   const updateFormData = (field, value) => {
@@ -40,18 +37,10 @@ const RepairForm = () => {
 
     switch (step) {
       case 1:
-        if (!formData.client_name.trim()) newErrors.client_name = 'Le nom est requis';
-        if (!formData.client_email.trim()) newErrors.client_email = 'L\'email est requis';
-        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.client_email)) {
-          newErrors.client_email = 'Format d\'email invalide';
-        }
-        if (!formData.client_phone.trim()) newErrors.client_phone = 'Le téléphone est requis';
-        break;
-      case 2:
         if (!formData.device_type) newErrors.device_type = 'Le type d\'appareil est requis';
         if (!formData.device_model.trim()) newErrors.device_model = 'Le modèle est requis';
         break;
-      case 3:
+      case 2:
         if (!formData.issue_description.trim()) {
           newErrors.issue_description = 'La description du problème est requise';
         } else if (formData.issue_description.trim().length < 10) {
@@ -79,11 +68,8 @@ const RepairForm = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:4000/api/repairs', {
+      const response = await authFetch('http://localhost:4000/api/repairs', { // Use authFetch
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(formData),
       });
 
@@ -92,7 +78,7 @@ const RepairForm = () => {
       if (data.success) {
         setTrackingCode(data.repair.tracking_code);
         toast.success('Ticket de réparation créé avec succès!');
-        setCurrentStep(5); // Success step
+        setCurrentStep(4); // Success step
       } else {
         toast.error(data.error || 'Erreur lors de la création du ticket');
       }
@@ -107,49 +93,6 @@ const RepairForm = () => {
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-neutral-900 mb-2">Informations Client</h2>
-              <p className="text-neutral-600">Veuillez saisir vos coordonnées pour créer votre ticket</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input
-                label="Nom complet"
-                type="text"
-                placeholder="Jean Dupont"
-                value={formData.client_name}
-                onChange={(e) => updateFormData('client_name', e.target.value)}
-                error={errors.client_name}
-                required
-              />
-
-              <Input
-                label="Email"
-                type="email"
-                placeholder="jean@example.com"
-                value={formData.client_email}
-                onChange={(e) => updateFormData('client_email', e.target.value)}
-                error={errors.client_email}
-                required
-              />
-
-              <Input
-                label="Téléphone"
-                type="tel"
-                placeholder="+33 1 23 45 67 89"
-                value={formData.client_phone}
-                onChange={(e) => updateFormData('client_phone', e.target.value)}
-                error={errors.client_phone}
-                required
-                className="md:col-span-2"
-              />
-            </div>
-          </div>
-        );
-
-      case 2:
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
@@ -206,7 +149,7 @@ const RepairForm = () => {
           </div>
         );
 
-      case 3:
+      case 2: // This is now the second step
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
@@ -262,7 +205,7 @@ const RepairForm = () => {
           </div>
         );
 
-      case 4:
+      case 3: // This is now the third step
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
@@ -274,16 +217,12 @@ const RepairForm = () => {
               <h3 className="text-lg font-semibold mb-4">Récapitulatif</h3>
               <div className="space-y-4">
                 <div className="flex justify-between">
-                  <span className="text-neutral-600">Client:</span>
-                  <span className="font-medium">{formData.client_name}</span>
+                  <span className="text-neutral-600">Client:</span> {/* Display logged-in user info */}
+                  <span className="font-medium">{user?.name}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-neutral-600">Email:</span>
-                  <span className="font-medium break-all">{formData.client_email}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-neutral-600">Téléphone:</span>
-                  <span className="font-medium">{formData.client_phone}</span>
+                  <span className="font-medium break-all">{user?.email}</span>
                 </div>
                 <div className="border-t border-neutral-200/80 my-3"></div>
                 <div className="flex justify-between">
@@ -303,7 +242,7 @@ const RepairForm = () => {
           </div>
         );
 
-      case 5:
+      case 4: // This is now the success step
         return (
           <div className="text-center space-y-6">
             <div className="text-7xl mb-4 animate-bounce">✅</div>
@@ -341,7 +280,6 @@ const RepairForm = () => {
   };
 
   return (
-    <Layout>
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Subtle decorative background blob */}
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[400px] bg-primary-50/60 rounded-full blur-3xl -z-10 pointer-events-none"></div>
@@ -350,7 +288,7 @@ const RepairForm = () => {
           <Breadcrumbs steps={steps} currentStep={currentStep} />
         )}
 
-        <div className="mt-8">
+        <div className="mt-8 card"> {/* Wrap content in a card for better visual appeal */}
           {renderStepContent()}
         </div>
 
@@ -365,15 +303,14 @@ const RepairForm = () => {
             </Button>
 
             <Button
-              onClick={currentStep === 4 ? submitForm : nextStep}
+              onClick={currentStep === 3 ? submitForm : nextStep} // Adjust step number
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Envoi en cours...' : currentStep === 4 ? 'Créer le Ticket' : 'Suivant'}
+              {isSubmitting ? 'Envoi en cours...' : currentStep === 3 ? 'Créer le Ticket' : 'Suivant'} // Adjust step number
             </Button>
           </div>
         )}
       </div>
-    </Layout>
   );
 };
 

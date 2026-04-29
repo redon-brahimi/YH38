@@ -1,6 +1,7 @@
 import express from 'express';
 import pkg from 'pg';
 const { Pool } = pkg;
+import { protect } from '../auth.js'; // Import the protect middleware
 
 const router = express.Router();
 
@@ -10,12 +11,16 @@ const pool = new Pool({
 });
 
 // POST /api/repairs - Create a new repair ticket
-router.post('/', async (req, res) => {
+router.post('/', protect, async (req, res) => { // Add protect middleware
   try {
+    const clientId = req.user.id; // Get client_id from authenticated user
+    const userType = req.user.type;
+
+    if (userType !== 'client') {
+        return res.status(403).json({ success: false, error: 'Only clients can create repair tickets.' });
+    }
+
     const {
-      client_name,
-      client_email,
-      client_phone,
       device_type,
       device_model,
       issue_description,
@@ -23,28 +28,11 @@ router.post('/', async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!client_name || !client_email || !device_type || !device_model || !issue_description) {
+    if (!device_type || !device_model || !issue_description) {
       return res.status(400).json({
         success: false,
-        error: 'Tous les champs requis doivent être remplis'
+        error: 'Le type d\'appareil, le modèle et la description du problème sont requis.'
       });
-    }
-
-    // Create or find client
-    let clientResult = await pool.query(
-      'SELECT id FROM clients WHERE email = $1',
-      [client_email]
-    );
-
-    let clientId;
-    if (clientResult.rows.length === 0) {
-      const newClient = await pool.query(
-        'INSERT INTO clients (name, email, phone) VALUES ($1, $2, $3) RETURNING id',
-        [client_name, client_email, client_phone]
-      );
-      clientId = newClient.rows[0].id;
-    } else {
-      clientId = clientResult.rows[0].id;
     }
 
     // Create repair
@@ -75,6 +63,68 @@ router.post('/', async (req, res) => {
       success: false,
       error: 'Erreur lors de la création du ticket de réparation'
     });
+  }
+});
+
+// GET /api/repairs/client - Get all repairs for the authenticated client
+router.get('/client', protect, async (req, res) => {
+  try {
+    const clientId = req.user.id;
+    const userType = req.user.type;
+
+    if (userType !== 'client') {
+      return res.status(403).json({ success: false, error: 'Access denied. Only clients can view their repairs.' });
+    }
+
+    const result = await pool.query(`
+      SELECT r.*, c.name as client_name, c.email, c.phone,
+             a.appointment_date, a.appointment_time, a.status as appointment_status,
+             a.notes as appointment_notes
+      FROM repairs r
+      JOIN clients c ON r.client_id = c.id
+      LEFT JOIN appointments a ON r.id = a.repair_id
+      WHERE r.client_id = $1
+      ORDER BY r.created_at DESC
+    `, [clientId]);
+
+    const repairs = result.rows.map(repair => {
+      const statusMap = {
+        'pending': 'En attente',
+        'in_progress': 'En cours de réparation',
+        'fixed': 'Réparé',
+        'ready_for_pickup': 'Prêt pour récupération'
+      };
+      return {
+        id: repair.id,
+        tracking_code: `YH38-${repair.id.toString().padStart(6, '0')}`,
+        status: repair.status,
+        status_french: statusMap[repair.status] || repair.status,
+        device_type: repair.device_type,
+        device_model: repair.device_model,
+        issue_description: repair.issue_description,
+        priority: repair.priority,
+        estimated_cost: repair.estimated_cost,
+        actual_cost: repair.actual_cost,
+        created_at: repair.created_at,
+        updated_at: repair.updated_at,
+        client: {
+          name: repair.client_name,
+          email: repair.email,
+          phone: repair.phone
+        },
+        appointment: repair.appointment_date ? {
+          date: repair.appointment_date,
+          time: repair.appointment_time,
+          status: repair.appointment_status,
+          notes: repair.appointment_notes
+        } : null
+      };
+    });
+
+    res.json({ success: true, repairs });
+  } catch (error) {
+    console.error('Error fetching client repairs:', error);
+    res.status(500).json({ success: false, error: 'Erreur lors de la récupération des réparations du client.' });
   }
 });
 

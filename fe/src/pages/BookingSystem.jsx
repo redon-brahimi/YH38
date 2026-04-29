@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import Layout from '../components/Layout';
-import Button from '../components/Button';
-import Input from '../components/Input';
+import Button from '@/components/Button.jsx';
+import Input from '@/components/Input.jsx';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/context/AuthContext.jsx';
 
 const BookingSystem = () => {
   const [trackingCode, setTrackingCode] = useState('');
+  const { authFetch, isAuthenticated } = useAuth();
   const [repair, setRepair] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [bookingStep, setBookingStep] = useState(1); // 1: Find repair, 2: Select slot, 3: Confirm
+  const [bookedSlots, setBookedSlots] = useState([]);
 
   // Check for tracking code in URL params
   useEffect(() => {
@@ -22,6 +24,28 @@ const BookingSystem = () => {
       handleFindRepair(code);
     }
   }, []);
+
+  // Fetch booked slots for the selected date
+  useEffect(() => {
+    const fetchBookedSlots = async () => {
+      if (selectedDate) {
+        try {
+          const formattedDate = selectedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          const response = await fetch(`http://localhost:4000/api/appointments/booked-slots/${formattedDate}`);
+          const data = await response.json();
+
+          if (data.success) {
+            setBookedSlots(data.bookedTimes);
+          } else {
+            toast.error(data.error || 'Erreur lors de la récupération des créneaux réservés.');
+          }
+        } catch (error) {
+          console.error('Error fetching booked slots:', error);
+        }
+      }
+    };
+    fetchBookedSlots();
+  }, [selectedDate]);
 
   const handleFindRepair = async (code = trackingCode) => {
     if (!code.trim()) {
@@ -100,14 +124,29 @@ const BookingSystem = () => {
       return;
     }
 
+    if (!isAuthenticated) {
+      toast.error('Vous devez être connecté pour prendre rendez-vous.');
+      return;
+    }
+
     setLoading(true);
     try {
-      // In a real implementation, this would call an API to create the appointment
-      // For now, we'll simulate success
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API call
-
-      toast.success('Rendez-vous programmé avec succès !');
-      setBookingStep(3);
+      const response = await authFetch('http://localhost:4000/api/appointments', {
+        method: 'POST',
+        body: JSON.stringify({
+          repair_id: repair.id,
+          appointment_date: selectedDate.toISOString().split('T')[0], // YYYY-MM-DD
+          appointment_time: selectedTime,
+          notes: notes,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Rendez-vous programmé avec succès !');
+        setBookingStep(3);
+      } else {
+        toast.error(data.error || 'Erreur lors de la programmation du rendez-vous');
+      }
     } catch (error) {
       console.error('Error booking appointment:', error);
       toast.error('Erreur lors de la programmation du rendez-vous');
@@ -221,20 +260,23 @@ const BookingSystem = () => {
                 <h3 className="text-lg font-semibold mb-4">
                   Choisir une Heure - {formatDate(selectedDate)}
                 </h3>
-                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {timeSlots.map((slot) => (
+                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {timeSlots.map((slot) => {
+                    const isBooked = bookedSlots.includes(slot.value);
+                    return (
                     <button
                       key={slot.value}
                       onClick={() => setSelectedTime(slot.value)}
-                      className={`p-3 border-2 rounded-xl text-center transition-all duration-200 min-h-11 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                      className={`p-3 border-2 rounded-xl text-center transition-all duration-200 min-h-11 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${isBooked ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed' :
                         selectedTime === slot.value
                           ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md scale-105'
                           : 'border-neutral-200 bg-white hover:border-primary-300 hover:bg-neutral-50'
                       }`}
+                      disabled={isBooked}
                     >
                       <div className="font-medium">{slot.label}</div>
                     </button>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
@@ -265,8 +307,8 @@ const BookingSystem = () => {
                   </div>
                 </div>
                 <Button
-                  onClick={handleBooking}
-                  disabled={loading}
+                  onClick={handleBooking} // Use authFetch for booking
+                  disabled={loading || !isAuthenticated} // Disable if not authenticated
                   size="large"
                 >
                   {loading ? 'Programmation...' : 'Confirmer le Rendez-vous'}
@@ -333,7 +375,6 @@ const BookingSystem = () => {
   };
 
   return (
-    <Layout>
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Subtle decorative background blob */}
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[400px] bg-primary-50/60 rounded-full blur-3xl -z-10 pointer-events-none"></div>
@@ -347,7 +388,6 @@ const BookingSystem = () => {
 
         {renderStepContent()}
       </div>
-    </Layout>
   );
 };
 

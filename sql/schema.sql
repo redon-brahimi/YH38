@@ -12,6 +12,33 @@
 -- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ================================================
+-- CLEANUP (DROP EXISTING OBJECTS)
+-- ================================================
+-- Drop objects in reverse order of dependency to avoid errors.
+-- Using "IF EXISTS" prevents errors if the script is run on a fresh database.
+
+-- Drop triggers
+DROP TRIGGER IF EXISTS trigger_update_repair_updated_at ON repairs;
+
+-- Drop functions
+DROP FUNCTION IF EXISTS update_repair_updated_at();
+DROP FUNCTION IF EXISTS get_repair_status_french(VARCHAR);
+DROP FUNCTION IF EXISTS get_priority_french(VARCHAR);
+DROP FUNCTION IF EXISTS generate_tracking_code(INTEGER);
+
+-- Drop views
+DROP VIEW IF EXISTS appointment_details;
+DROP VIEW IF EXISTS repair_details;
+
+DROP TABLE IF EXISTS parts CASCADE;
+DROP TABLE IF EXISTS devices CASCADE;
+-- Drop tables (use CASCADE to automatically drop dependent objects like constraints)
+DROP TABLE IF EXISTS appointments CASCADE;
+DROP TABLE IF EXISTS repairs CASCADE;
+DROP TABLE IF EXISTS admins CASCADE;
+DROP TABLE IF EXISTS clients CASCADE;
+
+-- ================================================
 -- CLIENTS TABLE
 -- ================================================
 -- Stores client information for repair management
@@ -19,7 +46,10 @@ CREATE TABLE IF NOT EXISTS clients (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    phone VARCHAR(50),
+    phone VARCHAR(50),    
+    password VARCHAR(255) NOT NULL,
+    reset_password_token VARCHAR(255),
+    reset_password_expires TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -28,6 +58,36 @@ CREATE INDEX IF NOT EXISTS idx_clients_email ON clients(email);
 
 -- Add index on created_at for sorting
 CREATE INDEX IF NOT EXISTS idx_clients_created_at ON clients(created_at);
+
+-- ================================================
+-- DEVICES TABLE
+-- ================================================
+-- Stores general device models that can be repaired
+CREATE TABLE IF NOT EXISTS devices (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL, -- e.g., "iPhone 12", "MacBook Pro 13 (M1)"
+    type VARCHAR(50) NOT NULL CHECK (type IN ('phone', 'pc')), -- Matches repair device_type
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_devices_name ON devices(name);
+CREATE INDEX IF NOT EXISTS idx_devices_type ON devices(type);
+
+-- ================================================
+-- PARTS TABLE
+-- ================================================
+-- Stores information about replacement parts and their stock
+CREATE TABLE IF NOT EXISTS parts (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL, -- e.g., "iPhone 12 Screen", "MacBook Pro M1 Battery"
+    device_id INTEGER REFERENCES devices(id) ON DELETE CASCADE, -- Part is for a specific device model
+    stock_quantity INTEGER DEFAULT 0 CHECK (stock_quantity >= 0),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(name, device_id) -- A part name should be unique for a given device
+);
+
+CREATE INDEX IF NOT EXISTS idx_parts_device_id ON parts(device_id);
+CREATE INDEX IF NOT EXISTS idx_parts_name ON parts(name);
 
 -- ================================================
 -- REPAIRS TABLE
@@ -80,6 +140,24 @@ CREATE INDEX IF NOT EXISTS idx_appointments_client_id ON appointments(client_id)
 CREATE INDEX IF NOT EXISTS idx_appointments_date ON appointments(appointment_date);
 CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
 CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at);
+
+-- ================================================
+-- ADMINS TABLE
+-- ================================================
+-- Stores admin/worker user information
+CREATE TABLE IF NOT EXISTS admins (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    reset_password_token VARCHAR(255),
+    reset_password_expires TIMESTAMP,
+    role VARCHAR(50) DEFAULT 'admin' CHECK (role IN ('admin', 'technician')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add index on email for faster lookups
+CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
 
 -- ================================================
 -- VIEWS (Optional)
