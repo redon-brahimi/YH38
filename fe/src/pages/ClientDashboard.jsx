@@ -94,7 +94,7 @@ const ClientDashboard = () => {
                 {repair.status_french}
               </span>
               <div className="text-sm text-neutral-500 mt-1">Créé le: {new Date(repair.created_at).toLocaleDateString('fr-FR')}</div>
-              <Link to={`/track?code=${repair.tracking_code}`} className="mt-3 inline-flex items-center text-primary-600 hover:text-primary-700 text-sm font-medium">
+              <Link to={`/client/track?code=${repair.tracking_code}`} className="mt-3 inline-flex items-center text-primary-600 hover:text-primary-700 text-sm font-medium">
                 Voir les détails &rarr;
               </Link>
             </div>

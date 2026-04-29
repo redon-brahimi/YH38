@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext.jsx';
-import Button from '@/components/Button.jsx';
+import { Link } from 'react-router-dom';
+import Button from '@/components/Button.jsx'; // Ensure Button is imported
 import Modal from '@/components/Modal.jsx'; // Assuming you have a Modal component
 import Input from '@/components/Input.jsx';
 import toast from 'react-hot-toast';
@@ -9,6 +10,7 @@ const TrackRepair = () => {
   const { user, authFetch } = useAuth();
   const [trackingCode, setTrackingCode] = useState('');
   const [repair, setRepair] = useState(null);
+  const [initialRepairFetched, setInitialRepairFetched] = useState(false); // New state to track initial fetch
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isPartModalOpen, setIsPartModalOpen] = useState(false);
@@ -20,7 +22,7 @@ const TrackRepair = () => {
     const code = urlParams.get('code');
     if (code) {
       setTrackingCode(code);
-      handleFindRepair(code);
+      handleFindRepair(code, true); // Pass true for initial fetch
     }
   }, []);
 
@@ -31,6 +33,7 @@ const TrackRepair = () => {
     }
     setLoading(true);
     setRepair(null);
+    setInitialRepairFetched(false); // Reset for new search
     setIsEditing(false);
     try {
       const repairResponse = await fetch(`http://localhost:4000/api/repairs/${code.toUpperCase()}`);
@@ -57,6 +60,7 @@ const TrackRepair = () => {
         }
 
         toast.success('Réparation trouvée !');
+        setInitialRepairFetched(true); // Mark initial fetch as complete
       } else {
         console.error("Backend reported error:", repairData.error);
         toast.error(repairData.error || 'Ticket de réparation non trouvé.');
@@ -67,7 +71,7 @@ const TrackRepair = () => {
     } finally {
       setLoading(false);
     }
-  }, [authFetch]);
+  }, [authFetch, trackingCode]); // Added trackingCode to dependencies
 
   const handleSave = () => {
     // If status is being set to 'fixed' and there are parts available, prompt the user to select one.
@@ -99,6 +103,7 @@ const TrackRepair = () => {
       if (data.success) {
         toast.success('Détails de la réparation mis à jour.');
         setIsEditing(false);
+        setPartsForDevice([]); // Clear parts for device after saving
         setRepair(data.repair);
       } else {
         toast.error(data.error || 'Échec de la mise à jour.');
@@ -109,6 +114,20 @@ const TrackRepair = () => {
       setLoading(false);
     }
   };
+
+  const isViewingAsAdmin = user?.type === 'admin' && initialRepairFetched;
+  const isViewingAsClient = user?.type === 'client' && initialRepairFetched;
+
+  const getBackLink = () => {
+    if (isViewingAsAdmin) {
+      return { path: '/admin/repairs', text: 'Retour aux Réparations' };
+    }
+    if (isViewingAsClient) {
+      return { path: '/client/dashboard', text: 'Retour à mes Réparations' };
+    }
+    return null;
+  };
+  const backLink = getBackLink();
 
 
   const renderAdminEditSection = () => (
@@ -175,6 +194,13 @@ const TrackRepair = () => {
         <p className="mt-2 text-lg text-neutral-600">Entrez votre code de suivi pour voir le statut de votre appareil.</p>
       </div>
 
+      {backLink && (
+        <div className="mb-8">
+          <Link to={backLink.path} className="text-primary-600 hover:text-primary-800 flex items-center">
+            &larr; {backLink.text}
+          </Link>
+        </div>
+      )}
       <div className="max-w-lg mx-auto flex items-center gap-2 mb-12">
         <Input
           label="Code de suivi"

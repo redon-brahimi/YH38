@@ -54,6 +54,109 @@ router.get('/appointments', async (req, res) => {
 // REPAIR MANAGEMENT
 // ================================================
 
+// GET /api/admin/repairs - Get all repair tickets
+router.get('/repairs', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id FROM repairs ORDER BY created_at DESC
+    `);
+
+    // Use the helper function to get full details for each repair
+    const repairs = await Promise.all(result.rows.map(async (row) => {
+      return await getRepairDetailsById(row.id);
+    }));
+
+    res.json({ success: true, repairs });
+  } catch (error) {
+    console.error('Error fetching all repairs for admin:', error);
+    res.status(500).json({ success: false, error: 'Server error fetching all repairs.' });
+  }
+});
+
+// PUT /api/admin/repairs/:id - Update repair details (status, costs, etc.)
+router.put('/repairs/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status, part_id } = req.body; // Destructure status and part_id from req.body
+  let client; // Declare client here so it's accessible in finally
+
+  try {
+    client = await pool.connect(); // Connect inside the try block
+    await client.query('BEGIN');
+
+    if (status) {
+      if (!['pending', 'in_progress', 'fixed', 'ready_for_pickup'].includes(status)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: 'Invalid status provided.' });
+      }
+      await client.query('UPDATE repairs SET status = $1, updated_at = NOW() WHERE id = $2', [status, id]); // Perform the update
+    }
+
+    if (status === 'fixed' && part_id) {
+      try {
+        await Part.decrementStock(client, part_id);
+      } catch (stockError) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, error: stockError.message });
+      }
+    }
+
+    // After all updates, fetch the complete, correctly-structured repair details to return to the frontend
+    const detailedResult = await client.query(`
+      SELECT r.id, r.client_id,
+             c.name as client_name, c.email as client_email, c.phone as client_phone,
+             r.device_type, r.device_model, r.issue_description,
+             r.status, r.priority, r.estimated_cost, r.actual_cost,
+             r.created_at, r.updated_at,
+             a.appointment_date, a.appointment_time, a.status as appointment_status,
+             a.notes as appointment_notes,
+             (SELECT id FROM devices WHERE name = r.device_model AND type = r.device_type) as device_id
+      FROM repairs r
+      JOIN clients c ON r.client_id = c.id
+      LEFT JOIN appointments a ON r.id = a.repair_id
+      WHERE r.id = $1
+    `, [id]);
+
+    if (detailedResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Repair not found after update.' });
+    }
+
+    const updatedRepairData = detailedResult.rows[0];
+
+    // Re-shape the data to match the GET endpoint's structure (with a nested client object)
+    const statusMap = { 'pending': 'En attente', 'in_progress': 'En cours de réparation', 'fixed': 'Réparé', 'ready_for_pickup': 'Prêt pour récupération' };
+    const responseRepair = {
+      ...updatedRepairData,
+      tracking_code: `YH38-${updatedRepairData.id.toString().padStart(6, '0')}`,
+      status_french: statusMap[updatedRepairData.status] || updatedRepairData.status,
+      client: {
+        name: updatedRepairData.client_name,
+        email: updatedRepairData.client_email,
+        phone: updatedRepairData.client_phone,
+      },
+      appointment: updatedRepairData.appointment_date ? { date: updatedRepairData.appointment_date, time: updatedRepairData.appointment_time, status: updatedRepairData.appointment_status, notes: updatedRepairData.appointment_notes } : null
+    };
+    delete responseRepair.client_name;
+    delete responseRepair.client_email;
+    delete responseRepair.client_phone;
+
+    await client.query('COMMIT');
+    res.json({ success: true, repair: responseRepair, message: 'Repair updated successfully.' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error updating repair:', error);
+    res.status(500).json({ success: false, error: 'Server error during repair update.' });
+  } finally {
+    if (client) { // Ensure client exists before releasing
+      client.release();
+    }
+  }
+});
+
+// ================================================
+// REPAIR MANAGEMENT
+// ================================================
+
 // PUT /api/admin/repairs/:id - Update repair details (status, costs, etc.)
 router.put('/repairs/:id', async (req, res) => {
   const { id } = req.params;

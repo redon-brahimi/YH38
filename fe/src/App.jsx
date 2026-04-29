@@ -13,6 +13,9 @@ import AdminSignup from '@/pages/AdminSignup.jsx'; // Import the new AdminSignup
 import ClientDashboard from '@/pages/ClientDashboard.jsx';
 import AdminDashboard from '@/pages/AdminDashboard.jsx';
 import StockManagement from '@/pages/StockManagement.jsx';
+import ClientLayout from '@/components/ClientLayout.jsx'; // Import the new ClientLayout
+import AdminLayout from '@/components/AdminLayout.jsx';
+import AllRepairs from '@/pages/AllRepairs.jsx';
 import AddDevice from '@/pages/AddDevice.jsx';
 import AddPart from '@/pages/AddPart.jsx';
 import { AuthProvider } from '@/context/AuthContext.jsx';
@@ -32,30 +35,41 @@ function App() {
             <Route path="/admin/signup" element={<AdminSignup />} /> {/* Add the new route */}
             <Route path="/booking" element={<BookingSystem />} />
             <Route path="/track" element={<TrackRepair />} />
-            
-            {/* Protected Routes */}
-            <Route path="/repair" element={<ProtectedRoute><RepairForm /></ProtectedRoute>} />
-            <Route path="/client/dashboard" element={<ProtectedRoute><ClientDashboard /></ProtectedRoute>} />
-            <Route path="/admin/dashboard" element={
+
+            {/* Client Protected Routes with ClientLayout */}
+            <Route path="/client" element={<ProtectedRoute><ClientLayout /></ProtectedRoute>}>
+              <Route index element={<ClientDashboard />} /> {/* /client will show ClientDashboard */}
+              <Route path="dashboard" element={<ClientDashboard />} />
+              <Route path="repair" element={<RepairForm />} />
+              <Route path="booking" element={<BookingSystem />} />
+              <Route path="track" element={<TrackRepair />} /> {/* Nested TrackRepair for clients */}
+              {/* The general /track route remains public, but clients can access it via specific links */}
+            </Route>
+
+            {/* Fallback for client-side pages that were previously protected directly */}
+            {/* These are now covered by the /client nested routes above */}
+
+            {/* Admin Protected Routes with AdminLayout */}
+            <Route path="/admin" element={
               <ProtectedRoute adminOnly={true}>
-                <AdminDashboard />
+                <AdminLayout />
               </ProtectedRoute>
             } />
-            <Route path="/admin/stock" element={
-              <ProtectedRoute adminOnly={true}>
-                <StockManagement />
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/devices/new" element={
-              <ProtectedRoute adminOnly={true}>
-                <AddDevice />
-              </ProtectedRoute>
-            } />
-            <Route path="/admin/parts/new" element={
-              <ProtectedRoute adminOnly={true}>
-                <AddPart />
-              </ProtectedRoute>
-            } />
+            {/* Nested Admin Routes */}
+            <Route path="/admin" element={<ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>}>
+              <Route index element={<AdminDashboard />} /> {/* /admin will show AdminDashboard */}
+              <Route path="dashboard" element={<AdminDashboard />} />
+              {/* Temporarily pointing to AdminDashboard as "appointments" is not a direct page yet */}
+              <Route path="appointments" element={<AdminDashboard />} /> 
+              <Route path="repairs" element={<AllRepairs />} />
+              <Route path="stock" element={<StockManagement />} />
+              <Route path="devices/new" element={<AddDevice />} />
+              <Route path="parts/new" element={<AddPart />} />
+              <Route path="track" element={<TrackRepair />} /> {/* Nested TrackRepair for admins */}
+            </Route>
+
+            {/* Fallback for unhandled admin path (e.g., /admin/appointments without nested route) */}
+            {/* <Route path="/admin/*" element={<ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>} /> */}
 
           </Routes>
         </Layout>

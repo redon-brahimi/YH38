@@ -62,24 +62,7 @@ const AdminDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl font-bold text-secondary-900 mb-8">Tableau de Bord Administrateur</h1>
-      
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Link to="/admin/appointments" className="card hover:bg-primary-50">
-          <h3 className="font-bold text-lg">Rendez-vous à venir</h3>
-          <p className="text-3xl font-extrabold text-primary-600">{appointments.length}</p>
-        </Link>
-        <Link to="/admin/repairs" className="card hover:bg-primary-50">
-          <h3 className="font-bold text-lg">Toutes les réparations</h3>
-          <p className="text-neutral-500">Voir et gérer tous les tickets.</p>
-        </Link>
-        <Link to="/admin/stock" className="card hover:bg-primary-50">
-          <h3 className="font-bold text-lg">Gestion de stock</h3>
-          <p className="text-neutral-500">Ajouter des appareils et des pièces.</p>
-        </Link>
-      </div>
-
+      <h1 className="text-3xl font-bold text-secondary-900 mb-8">Tableau de Bord Administrateur</h1>      
       {/* Upcoming Appointments Section */}
       <div className="mt-12">
         <h2 className="text-2xl font-bold text-secondary-800 mb-6">Prochains rendez-vous</h2>
@@ -102,7 +85,7 @@ const AdminDashboard = () => {
                       <p className="font-bold text-secondary-800">
                         {new Date(app.appointment_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })} à {app.appointment_time.substring(0, 5)}
                       </p>
-                      <Link to={`/track?code=YH38-${String(app.repair_id).padStart(6, '0')}`} className="text-sm text-primary-600 hover:underline">
+                      <Link to={`/admin/track?code=YH38-${String(app.repair_id).padStart(6, '0')}`} className="text-sm text-primary-600 hover:underline">
                         Voir la réparation &rarr;
                       </Link>
                       <div className="mt-2">
