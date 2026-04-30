@@ -5,8 +5,8 @@ import Footer from './Footer.jsx';
 const Layout = ({ children }) => {
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar /> {/* Reintroduced Navbar */}
-      <main className="flex-grow pt-16"> {/* Added pt-16 for navbar */}
+      <Navbar />
+      <main className="flex-grow">
         {children}
       </main>
       <Footer />

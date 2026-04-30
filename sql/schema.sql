@@ -90,6 +90,52 @@ CREATE INDEX IF NOT EXISTS idx_parts_device_id ON parts(device_id);
 CREATE INDEX IF NOT EXISTS idx_parts_name ON parts(name);
 
 -- ================================================
+-- SUPPLIERS TABLE
+-- ================================================
+CREATE TABLE IF NOT EXISTS suppliers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    contact_email VARCHAR(255),
+    contact_phone VARCHAR(50),
+    address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);
+
+-- ================================================
+-- PURCHASE ORDERS TABLE
+-- ================================================
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    id SERIAL PRIMARY KEY,
+    supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL,
+    status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'ordered', 'received', 'cancelled')),
+    total_cost DECIMAL(10,2) DEFAULT 0 CHECK (total_cost >= 0),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier_id ON purchase_orders(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status);
+
+-- ================================================
+-- PURCHASE ORDER ITEMS TABLE
+-- ================================================
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+    id SERIAL PRIMARY KEY,
+    purchase_order_id INTEGER REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    part_id INTEGER REFERENCES parts(id) ON DELETE SET NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price DECIMAL(10,2) DEFAULT 0 CHECK (unit_price >= 0),
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_purchase_order_items_order_id ON purchase_order_items(purchase_order_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_order_items_part_id ON purchase_order_items(part_id);
+
+-- ================================================
 -- REPAIRS TABLE
 -- ================================================
 -- Stores repair ticket information

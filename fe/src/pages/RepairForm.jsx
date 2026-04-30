@@ -3,11 +3,11 @@ import Button from '../components/Button';
 import Input from '../components/Input';
 import Breadcrumbs from '../components/Breadcrumbs';
 import toast from 'react-hot-toast';
-import { useAuth } from '@/context/AuthContext.jsx'; // Import useAuth
+import { useAuth } from '@/context/AuthContext.jsx';
 
 const RepairForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
-  const { user, authFetch } = useAuth(); // Use authFetch for protected routes
+  const { user, authFetch } = useAuth();
   const [formData, setFormData] = useState({
     device_type: '',
     device_model: '',
@@ -19,14 +19,13 @@ const RepairForm = () => {
   const [trackingCode, setTrackingCode] = useState(null);
 
   const steps = [
-    { id: 1, title: 'Appareil', description: 'Type et modèle' },
-    { id: 2, title: 'Problème', description: 'Description du problème' },
-    { id: 3, title: 'Confirmation', description: 'Vérification et envoi' }
+    { id: 1, title: 'Appareil', description: 'Type et modèle', progress: 33 },
+    { id: 2, title: 'Problème', description: 'Description du problème', progress: 66 },
+    { id: 3, title: 'Confirmation', description: 'Vérification et envoi', progress: 100 }
   ];
 
   const updateFormData = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
@@ -68,7 +67,7 @@ const RepairForm = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await authFetch('http://localhost:4000/api/repairs', { // Use authFetch
+      const response = await authFetch('http://localhost:4000/api/repairs', {
         method: 'POST',
         body: JSON.stringify(formData),
       });
@@ -78,7 +77,7 @@ const RepairForm = () => {
       if (data.success) {
         setTrackingCode(data.repair.tracking_code);
         toast.success('Ticket de réparation créé avec succès!');
-        setCurrentStep(4); // Success step
+        setCurrentStep(4);
       } else {
         toast.error(data.error || 'Erreur lors de la création du ticket');
       }
@@ -149,7 +148,7 @@ const RepairForm = () => {
           </div>
         );
 
-      case 2: // This is now the second step
+      case 2:
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
@@ -185,7 +184,7 @@ const RepairForm = () => {
                     { value: 'high', label: 'Élevé', desc: 'Assez urgent' },
                     { value: 'urgent', label: 'Urgent', desc: 'Très urgent' }
                   ].map((priority) => (
-                    <button //
+                    <button
                       key={priority.value}
                       type="button"
                       onClick={() => updateFormData('priority', priority.value)}
@@ -205,7 +204,7 @@ const RepairForm = () => {
           </div>
         );
 
-      case 3: // This is now the third step
+      case 3:
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
@@ -217,7 +216,7 @@ const RepairForm = () => {
               <h3 className="text-lg font-semibold mb-4">Récapitulatif</h3>
               <div className="space-y-4">
                 <div className="flex justify-between">
-                  <span className="text-neutral-600">Client:</span> {/* Display logged-in user info */}
+                  <span className="text-neutral-600">Client:</span>
                   <span className="font-medium">{user?.name}</span>
                 </div>
                 <div className="flex justify-between">
@@ -242,7 +241,7 @@ const RepairForm = () => {
           </div>
         );
 
-      case 4: // This is now the success step
+      case 4:
         return (
           <div className="text-center space-y-6">
             <div className="text-7xl mb-4 animate-bounce">✅</div>
@@ -281,14 +280,26 @@ const RepairForm = () => {
 
   return (
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Subtle decorative background blob */}
         <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[400px] bg-primary-50/60 rounded-full blur-3xl -z-10 pointer-events-none"></div>
 
         {currentStep < 5 && (
           <Breadcrumbs steps={steps} currentStep={currentStep} />
         )}
 
-        <div className="mt-8 card"> {/* Wrap content in a card for better visual appeal */}
+        {/* Progress Bar */}
+        {currentStep < 4 && (
+          <div className="mb-8">
+            <div className="w-full bg-neutral-200 rounded-full h-2">
+              <div
+                className="bg-primary-600 h-2 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${steps.find(s => s.id === currentStep)?.progress || 0}%` }}
+              ></div>
+            </div>
+            <p className="text-sm text-neutral-600 mt-2">Étape {currentStep} sur 3</p>
+          </div>
+        )}
+
+        <div className="mt-8 card fade-in">
           {renderStepContent()}
         </div>
 
@@ -303,10 +314,10 @@ const RepairForm = () => {
             </Button>
 
             <Button
-              onClick={currentStep === 3 ? submitForm : nextStep} // Adjust step number
+              onClick={currentStep === 3 ? submitForm : nextStep}
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Envoi en cours...' : currentStep === 3 ? 'Créer le Ticket' : 'Suivant'} // Adjust step number
+              {isSubmitting ? 'Envoi en cours...' : currentStep === 3 ? 'Créer le Ticket' : 'Suivant'}
             </Button>
           </div>
         )}

@@ -18,4 +18,14 @@
   .input-field {
     @apply w-full px-4 py-3 rounded-xl border-2 border-neutral-200 bg-neutral-50/50 text-neutral-900 placeholder-neutral-400 focus:bg-white focus:outline-none focus:ring-0 focus:border-primary-500 transition-colors duration-200 disabled:bg-neutral-100 disabled:text-neutral-500 min-h-11;
   }
+
+  /* Subtle animations */
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }

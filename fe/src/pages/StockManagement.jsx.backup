@@ -1,0 +1,413 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from '@/context/AuthContext.jsx';
+import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
+import Button from '@/components/Button.jsx';
+import Input from '@/components/Input.jsx';
+import Skeleton from '@/components/Skeleton.jsx';
+
+const StockManagement = () => {
+  console.log('StockManagement component rendering');
+
+  const [parts, setParts] = useState([]);
+  const [orderList, setOrderList] = useState([]);
+  const [removedItems, setRemovedItems] = useState(new Set());
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState('all');
+  const { authFetch } = useAuth();
+
+  const LOW_STOCK_THRESHOLD = 5;
+// Load persisted data on mount
+  useEffect(() => {
+    try {
+      const savedRemovedItems = localStorage.getItem('stockManagement_removedItems');
+      if (savedRemovedItems) {
+        const parsed = JSON.parse(savedRemovedItems);
+        setRemovedItems(new Set(parsed));
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved removed items, resetting:', e);
+      localStorage.removeItem('stockManagement_removedItems');
+      setRemovedItems(new Set());
+
+  // Save removed items to localStorage
+  useEffect(() => {
+    localStorage.setItem('stockManagement_removedItems', JSON.stringify([...removedItems]));
+  }, [removedItems]);
+
+  const buildOrderListFromParts = (currentParts, existingList = []) => {
+    const lowStockParts = currentParts.filter(part => 
+      part.stock_quantity < LOW_STOCK_THRESHOLD && !removedItems.has(part.id)
+    );
+
+    return lowStockParts.map(part => {
+      const existing = existingList.find(item => item.id === part.id);
+      return {
+        id: part.id,
+        name: part.name,
+        device_name: part.device_name,
+        stock_quantity: part.stock_quantity,
+        order_quantity: existing?.order_quantity ?? Math.max(1, LOW_STOCK_THRESHOLD - part.stock_quantity),
+        note: existing?.note ?? '',
+      };
+    });
+
+  const fetchParts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await authFetch('http://localhost:4000/api/admin/parts');
+      const data = await response.json();
+      if (data.success) {
+        const loadedParts = data.parts.map(p => ({ ...p, _changeAmount: 0, _inputValue: '0' }));
+        setParts(loadedParts);
+        setOrderList(prev => buildOrderListFromParts(loadedParts, prev));
+      } else {
+        toast.error(data.error || 'Failed to fetch parts.');
+      }
+    } catch (err) {
+      toast.error('Server connection error while fetching parts.');
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch]);
+
+  useEffect(() => {
+    fetchParts();
+  }, [fetchParts]);
+
+  const handleStockUpdate = async (partId, changeAmount) => {
+    if (changeAmount === 0) return; // No change to apply
+    const currentPart = parts.find(p => p.id === partId);
+
+    try {
+      const response = await authFetch(`http://localhost:4000/api/admin/parts/${partId}/stock`, { // Backend expects quantity_change
+        method: 'PUT',
+        body: JSON.stringify({ quantity_change: changeAmount }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Stock mis à jour.');
+        const updatedPart = data.part;
+        setParts(prevParts =>
+          prevParts.map(p =>
+            p.id === partId
+              ? { ...p, stock_quantity: updatedPart.stock_quantity, _changeAmount: 0, _inputValue: '0' }
+              : p
+          )
+        );
+
+        setOrderList(prev => {
+          const itemExists = prev.some(item => item.id === partId);
+          const newStockQuantity = updatedPart.stock_quantity;
+
+          if (newStockQuantity >= LOW_STOCK_THRESHOLD) {
+            return prev.filter(item => item.id !== partId);
+          }
+
+          if (itemExists) {
+            return prev.map(item =>
+              item.id === partId
+                ? { ...item, stock_quantity: newStockQuantity }
+                : item
+            );
+          }
+
+          return [
+            ...prev,
+            {
+              id: partId,
+              name: currentPart?.name || updatedPart.name,
+              device_name: currentPart?.device_name || updatedPart.device_name,
+              stock_quantity: newStockQuantity,
+              order_quantity: Math.max(1, LOW_STOCK_THRESHOLD - newStockQuantity),
+              note: '',
+            },
+          ];
+        });
+      } else {
+        toast.error(data.error || 'Failed to update stock.');
+      }
+    } catch (err) {
+      toast.error('Server connection error while updating stock.');
+    }
+  };
+
+  // Handler for changing the value in the input field for a specific part
+  const handleEditedQuantityChange = (partId, value) => { // This now updates the change amount
+    setParts(prevParts =>
+      prevParts.map(p =>
+        p.id === partId
+          ? {
+              ...p,
+              _inputValue: value, // Store the raw string value for display
+              _changeAmount: isNaN(parseInt(value, 10)) ? 0 : parseInt(value, 10), // Parse for numeric logic, treat NaN (e.g., just '-') as 0
+            }
+          : p
+      )
+    );
+  };
+RemovedItems(prev => new Set([...prev, partId]));
+    set
+  const handleOrderQuantityChange = (partId, value) => {
+    const quantity = isNaN(parseInt(value, 10)) ? 0 : parseInt(value, 10);
+    setOrderList(prev =>
+      prev.map(item =>
+        item.id === partId ? { ...item, order_quantity: quantity } : item
+      )
+    );
+  };
+
+  const handleOrderNoteChange = (partId, note) => {
+    setOrderList(prev =>
+      prev.map(item =>
+        item.id === partId ? { ...item, note } : item
+      )
+    );
+  };
+
+  const handleRemoveOrderItem = (partId) => {
+    setOrderList(prev => prev.filter(item => item.id !== partId));
+  };
+
+  const downloadOrderListCsv = () => {
+    if (!orderList.length) return;
+
+    const headers = ['Nom de la pièce', 'Modèle d\'appareil', 'Stock actuel', 'Quantité à commander', 'Note'];
+    const csvRows = [headers.join(',')];
+
+    orderList.forEach(item => {
+      const row = [
+        `"${item.name}"`,
+        `"${item.device_name}"`,
+        item.stock_quantity,
+        item.order_quantity,
+        `"${item.note.replace(/"/g, '""')}"`,
+      ];
+      csvRows.push(row.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'liste_reapprovisionnement.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Memoized filtered parts for efficient rendering
+  const filteredParts = useMemo(() => {
+    return parts.filter(part => {
+      const matchesType = deviceTypeFilter === 'all' || part.device_type === deviceTypeFilter;
+      const matchesSearch = searchTerm === '' ||
+        part.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        part.device_name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesType && matchesSearch;
+    });
+  }, [parts, searchTerm, deviceTypeFilter]);
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="flex justify-between items-center mb-8">
+          <Skeleton className="h-8 w-48" />
+          <div className="flex gap-4">
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-32" />
+          </div>
+        </div>
+        <div className="card mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-neutral-200/80 overflow-x-auto">
+          <div className="p-6">
+            <Skeleton lines={5} className="mb-4" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12"> {/* Content only, AdminLayout provides overall structure */}
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-secondary-900">Gestion de Stock</h1>
+        <div className="flex gap-4">
+          <Link to="/admin/devices/new">
+            <Button>Ajouter un Appareil</Button>
+          </Link>
+          <Link to="/admin/parts/new">
+            <Button variant="outline">Ajouter une Pièce</Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Filters Section */}
+      <div className="card mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Input
+            label="Rechercher une pièce ou un appareil"
+            type="text"
+            placeholder="Ex: Écran iPhone 12..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">Filtrer par type</label>
+            <select
+              value={deviceTypeFilter}
+              onChange={(e) => setDeviceTypeFilter(e.target.value)}
+              className="input-field"
+            >
+              <option value="all">Tous les types</option>
+              <option value="phone">Téléphone</option>
+              <option value="pc">Ordinateur</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-8">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-secondary-900">Liste de réapprovisionnement</h2>
+              <p className="text-sm text-neutral-600">Les pièces avec moins de {LOW_STOCK_THRESHOLD} articles sont ajoutées automatiquement.</p>
+            </div>
+            <Button onClick={downloadOrderListCsv} disabled={orderList.length === 0}>
+              Télécharger la liste
+            </Button>
+          </div>
+
+          {orderList.length === 0 ? (
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-6 text-neutral-600">
+              Aucune pièce en dessous du seuil de réapprovisionnement pour le moment.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-neutral-200">
+                <thead className="bg-neutral-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Pièce</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Appareil</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Stock actuel</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Quantité à commander</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Note</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-neutral-200">
+                  {orderList.map(item => (
+                    <tr key={item.id}>
+                      <td className="px-4 py-3 whitespace-nowrap text-secondary-900 font-medium">{item.name}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-neutral-600">{item.device_name}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-neutral-900">{item.stock_quantity}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.order_quantity}
+                          onChange={(e) => handleOrderQuantityChange(item.id, e.target.value)}
+                          className="input-field w-24"
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <input
+                          type="text"
+                          value={item.note}
+                          onChange={(e) => handleOrderNoteChange(item.id, e.target.value)}
+                          className="input-field w-full"
+                          placeholder="Remarque..."
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <Button variant="outline" size="small" onClick={() => handleRemoveOrderItem(item.id)}>
+                          Retirer
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-neutral-200/80 overflow-x-auto">
+          <table className="min-w-full divide-y divide-neutral-200">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Nom de la pièce</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Modèle d'appareil</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Quantité</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-neutral-200">
+              {filteredParts.length > 0 ? (
+                filteredParts.map(part => {
+                const isLowStock = part.stock_quantity < 3;
+                return (
+                  <tr key={part.id} className={isLowStock ? 'bg-warning-50' : ''}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-medium text-secondary-900">{part.name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-neutral-600">{part.device_name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className={`text-lg font-bold ${isLowStock ? 'text-error-600' : 'text-secondary-900'}`}>
+                        {isLowStock && <span className="mr-2" aria-hidden="true">⚠️</span>}
+                        {part.stock_quantity}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">                        
+                        <Input
+                          type="number"
+                          value={part._inputValue} // Display the raw input value
+                          onChange={(e) => handleEditedQuantityChange(part.id, e.target.value)}
+                          className="w-24 text-center"
+                          name={`stock-change-input-${part.id}`} // Unique name for each input
+                          placeholder="+/-"
+                        />
+                        <Button
+                          size="small"                          
+                          onClick={() => handleStockUpdate(part.id, part._changeAmount)}
+                          disabled={part._changeAmount === 0} // Disable if no change
+                          aria-label={`Appliquer le changement de stock de ${part._changeAmount} pour ${part.name}`}
+                        >
+                          Mettre à jour
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+              ) : (
+                <tr>
+                  <td colSpan="4" className="text-center py-12 text-neutral-500">
+                    Aucune pièce ne correspond à vos critères de recherche.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+    </div>
+  );
+};
+
+};
+
+};
+
+export default StockManagement;

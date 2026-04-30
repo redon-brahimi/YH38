@@ -35,8 +35,11 @@ pool.on('error', (err) => {
 
 // Middleware
 app.use(helmet());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
+  origin: allowedOrigins,
   credentials: true
 }));
 
@@ -54,8 +57,11 @@ async function initializeDatabase() {
   try {
     // Import models
     const { Client } = await import('./models/Client.js');
-    const { Device } = await import('./models/Device.js'); // New
-    const { Part } = await import('./models/Part.js');     // New
+    const { Device } = await import('./models/Device.js');
+    const { Part } = await import('./models/Part.js');
+    const { Supplier } = await import('./models/Supplier.js');
+    const { PurchaseOrder } = await import('./models/PurchaseOrder.js');
+    const { PurchaseOrderItem } = await import('./models/PurchaseOrderItem.js');
     const { Admin } = await import('./models/Admin.js');
     const { Repair } = await import('./models/Repair.js');
     const { Appointment } = await import('./models/Appointment.js');
@@ -63,8 +69,11 @@ async function initializeDatabase() {
     // Create tables
     await pool.query(Client.createTableQuery);
     await pool.query(Admin.createTableQuery);
-    await pool.query(Device.createTableQuery); // New
-    await pool.query(Part.createTableQuery);   // New
+    await pool.query(Device.createTableQuery);
+    await pool.query(Part.createTableQuery);
+    await pool.query(Supplier.createTableQuery);
+    await pool.query(PurchaseOrder.createTableQuery);
+    await pool.query(PurchaseOrderItem.createTableQuery);
     await pool.query(Repair.createTableQuery);
     await pool.query(Appointment.createTableQuery);
 
