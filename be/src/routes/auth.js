@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pkg from 'pg';
 import crypto from 'crypto'; // For generating secure tokens
+import logger from '../logger.js';
+import { dispatchSignup } from '../services/notificationService.js';
 const { Pool } = pkg;
 
 const router = express.Router();
@@ -30,10 +32,14 @@ const generateToken = (user, userType) => {
 
 // Client Signup
 router.post('/client/signup', async (req, res) => {
-  const { name, email, phone, password } = req.body;
+  const { name, email, phone, password, notification_preference = 'email' } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ success: false, error: 'Please provide name, email, and password.' });
+  }
+
+  if (notification_preference && notification_preference !== 'email') {
+    return res.status(400).json({ success: false, error: 'Invalid notification preference. Only "email" is supported.' });
   }
 
   try {
@@ -46,16 +52,19 @@ router.post('/client/signup', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const newClient = await pool.query(
-      'INSERT INTO clients (name, email, phone, password) VALUES ($1, $2, $3, $4) RETURNING id, name, email',
-      [name, email, phone, hashedPassword]
+      'INSERT INTO clients (name, email, phone, password, notification_preference) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [name, email, phone, hashedPassword, notification_preference]
     );
 
     const client = newClient.rows[0];
     const token = generateToken(client, 'client');
 
+    // Asynchronously send a welcome email. No need to await.
+    dispatchSignup(client);
+
     res.status(201).json({ success: true, token, user: { id: client.id, name: client.name, email: client.email, type: 'client' } });
   } catch (error) {
-    console.error('Client signup error:', error);
+    logger.error('Client signup error:', { error, body: req.body });
     res.status(500).json({ success: false, error: 'Server error during client signup.' });
   }
 });
@@ -84,7 +93,7 @@ router.post('/client/login', async (req, res) => {
     const token = generateToken(client, 'client');
     res.json({ success: true, token, user: { id: client.id, name: client.name, email: client.email, type: 'client' } });
   } catch (error) {
-    console.error('Client login error:', error);
+    logger.error('Client login error:', { error, body: req.body });
     res.status(500).json({ success: false, error: 'Server error during client login.' });
   }
 });
@@ -116,7 +125,7 @@ router.post('/admin/signup', async (req, res) => {
   
       res.status(201).json({ success: true, token, user: { id: admin.id, name: admin.name, email: admin.email, type: 'admin', role: admin.role } });
     } catch (error) {
-      console.error('Admin signup error:', error);
+      logger.error('Admin signup error:', { error, body: req.body });
       res.status(500).json({ success: false, error: 'Server error during admin signup.' });
     }
 });
@@ -145,7 +154,7 @@ router.post('/admin/login', async (req, res) => {
       const token = generateToken(admin, 'admin');
       res.json({ success: true, token, user: { id: admin.id, name: admin.name, email: admin.email, type: 'admin', role: admin.role } });
     } catch (error) {
-      console.error('Admin login error:', error);
+      logger.error('Admin login error:', { error, body: req.body });
       res.status(500).json({ success: false, error: 'Server error during admin login.' });
     }
 });
@@ -191,11 +200,11 @@ router.post('/forgot-password', async (req, res) => {
     // In a real application, you would send an email here.
     // For now, we'll log the reset URL.
     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}&type=${userType}`;
-    console.log(`Password Reset URL for ${user.email}: ${resetURL}`);
+    logger.info(`Password Reset URL for ${user.email}: ${resetURL}`);
 
     res.json({ success: true, message: 'If an account with that email exists, a password reset link has been sent.' });
   } catch (error) {
-    console.error('Forgot password error:', error);
+    logger.error('Forgot password error:', { error, body: req.body });
     res.status(500).json({ success: false, error: 'Server error during password reset request.' });
   }
 });
@@ -230,7 +239,7 @@ router.post('/reset-password', async (req, res) => {
 
     res.json({ success: true, message: 'Password has been reset successfully.' });
   } catch (error) {
-    console.error('Reset password error:', error);
+    logger.error('Reset password error:', { error, body: req.body });
     res.status(500).json({ success: false, error: 'Server error during password reset.' });
   }
 });

@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS clients (
     phone VARCHAR(50),    
     password VARCHAR(255) NOT NULL,
     reset_password_token VARCHAR(255),
+    notification_preference VARCHAR(20) DEFAULT 'email' NOT NULL CHECK (notification_preference IN ('email')),
     reset_password_expires TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -81,6 +82,7 @@ CREATE TABLE IF NOT EXISTS parts (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL, -- e.g., "iPhone 12 Screen", "MacBook Pro M1 Battery"
     device_id INTEGER REFERENCES devices(id) ON DELETE CASCADE, -- Part is for a specific device model
+    price DECIMAL(10,2) DEFAULT 0.00 CHECK (price >= 0),
     stock_quantity INTEGER DEFAULT 0 CHECK (stock_quantity >= 0),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(name, device_id) -- A part name should be unique for a given device
@@ -144,7 +146,8 @@ CREATE TABLE IF NOT EXISTS repairs (
     client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
     device_type VARCHAR(100) NOT NULL CHECK (device_type IN ('phone', 'pc')),
     device_model VARCHAR(255) NOT NULL,
-    issue_description TEXT NOT NULL,
+    issue_type VARCHAR(100) NOT NULL,
+    issue_description TEXT,
     status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'fixed', 'ready_for_pickup')),
     priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
     estimated_cost DECIMAL(10,2) CHECK (estimated_cost >= 0),
@@ -195,6 +198,7 @@ CREATE TABLE IF NOT EXISTS admins (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
+    phone VARCHAR(50),
     password VARCHAR(255) NOT NULL,
     reset_password_token VARCHAR(255),
     reset_password_expires TIMESTAMP,
@@ -330,6 +334,23 @@ CREATE TRIGGER trigger_update_repair_updated_at
     BEFORE UPDATE ON repairs
     FOR EACH ROW
     EXECUTE FUNCTION update_repair_updated_at();
+
+-- ================================================
+-- API ERROR LOGS TABLE
+-- ================================================
+-- Stores detailed information about API errors for debugging and monitoring
+CREATE TABLE IF NOT EXISTS api_error_logs (
+    id SERIAL PRIMARY KEY,
+    method VARCHAR(10),
+    url VARCHAR(2048),
+    message TEXT,
+    stack TEXT,
+    ip_address VARCHAR(50),
+    user_context JSONB, -- Store user info if available
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_error_logs_created_at ON api_error_logs(created_at);
 
 -- ================================================
 -- SAMPLE DATA (Optional - for testing)

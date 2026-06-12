@@ -6,9 +6,9 @@ const AdminLayout = () => {
 
   const adminNavLinks = [
     { path: '/admin/dashboard', label: 'Tableau de Bord', icon: '📊' },
-    { path: '/admin/appointments', label: 'Rendez-vous', icon: '📅' },
     { path: '/admin/repairs', label: 'Réparations', icon: '🔧' },
     { path: '/admin/stock', label: 'Gestion de Stock', icon: '📦' },
+    { path: '/admin/orders', label: 'Commandes', icon: '🛒' },
     // Add other admin links here as they are created
   ];
 

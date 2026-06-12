@@ -1,9 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Breadcrumbs from '../components/Breadcrumbs';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext.jsx';
+
+const issueTypes = [
+  { key: 'ecran', label: 'Écran' },
+  { key: 'batterie', label: 'Batterie' },
+  { key: 'camera_arriere', label: 'Caméra Arrière' },
+  { key: 'camera_avant', label: 'Caméra Avant' },
+  { key: 'connecteur', label: 'Connecteur de charge' },
+  { key: 'arriere', label: 'Vitre Arrière' },
+  { key: 'boutons', label: 'Boutons' },
+  { key: 'micro', label: 'Micro' },
+  { key: 'haut_parleur', label: 'Haut-Parleur' },
+  { key: 'ecouteur_interne', label: 'Écouteur Interne' },
+  { key: 'lecteur_sim', label: 'Lecteur SIM' },
+  { key: 'capteur_proximite', label: 'Capteur de Proximité' },
+  { key: 'flash', label: 'Flash' },
+];
 
 const RepairForm = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -11,12 +27,15 @@ const RepairForm = () => {
   const [formData, setFormData] = useState({
     device_type: '',
     device_model: '',
+    issue_type: '',
     issue_description: '',
     priority: 'normal'
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [trackingCode, setTrackingCode] = useState(null);
+  const [partAvailability, setPartAvailability] = useState(null);
+  const [isCheckingPart, setIsCheckingPart] = useState(false);
 
   const steps = [
     { id: 1, title: 'Appareil', description: 'Type et modèle', progress: 33 },
@@ -29,8 +48,40 @@ const RepairForm = () => {
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
+    if (field === 'issue_type') {
+      setPartAvailability(null); // Reset on new issue selection
+    }
   };
 
+  // Effect to check part availability
+  useEffect(() => {
+    const checkPart = async () => {
+      if (formData.device_model && formData.issue_type) {
+        setIsCheckingPart(true);
+        setPartAvailability(null);
+        try {
+          const response = await authFetch('http://localhost:4000/api/admin/parts/check-availability', {
+            method: 'POST',
+            body: JSON.stringify({
+              device_model: formData.device_model,
+              issue_type: formData.issue_type,
+            }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            setPartAvailability({ available: data.available, message: data.message });
+          } else {
+            setPartAvailability({ available: false, message: data.error || 'Erreur lors de la vérification.' });
+          }
+        } catch (err) {
+          setPartAvailability({ available: false, message: 'Erreur de connexion au serveur.' });
+        } finally {
+          setIsCheckingPart(false);
+        }
+      }
+    };
+    checkPart();
+  }, [formData.device_model, formData.issue_type, authFetch]);
   const validateStep = (step) => {
     const newErrors = {};
 
@@ -40,10 +91,8 @@ const RepairForm = () => {
         if (!formData.device_model.trim()) newErrors.device_model = 'Le modèle est requis';
         break;
       case 2:
-        if (!formData.issue_description.trim()) {
-          newErrors.issue_description = 'La description du problème est requise';
-        } else if (formData.issue_description.trim().length < 10) {
-          newErrors.issue_description = 'La description doit contenir au moins 10 caractères';
+        if (!formData.issue_type) {
+          newErrors.issue_type = 'Veuillez sélectionner le type de problème.';
         }
         break;
     }
@@ -152,25 +201,60 @@ const RepairForm = () => {
         return (
           <div className="space-y-6">
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-neutral-900 mb-2">Description du Problème</h2>
-              <p className="text-neutral-600">Décrivez précisément le problème rencontré</p>
+              <h2 className="text-2xl font-bold text-neutral-900 mb-2">Quel est le problème ?</h2>
+              <p className="text-neutral-600">Sélectionnez le problème principal de votre appareil.</p>
             </div>
 
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  Description détaillée <span className="text-error-500">*</span>
+                  Type de problème <span className="text-error-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {issueTypes.map((issue) => (
+                    <button
+                      key={issue.key}
+                      type="button"
+                      onClick={() => updateFormData('issue_type', issue.key)}
+                      className={`p-3 border-2 rounded-xl text-center transition-all duration-200 min-h-11 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                        formData.issue_type === issue.key
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-md'
+                          : 'border-neutral-300 hover:border-primary-300'
+                      }`}
+                    >
+                      <div className="font-medium text-sm">{issue.label}</div>
+                    </button>
+                  ))}
+                </div>
+                {errors.issue_type && (
+                  <p className="mt-2 text-sm text-error-600">{errors.issue_type}</p>
+                )}
+              </div>
+
+              {isCheckingPart && (
+                <div className="text-center text-neutral-600">Vérification du stock...</div>
+              )}
+
+              {partAvailability && (
+                <div className={`p-4 rounded-lg text-sm ${
+                  partAvailability.available
+                    ? 'bg-success-50 text-success-800 border border-success-200'
+                    : 'bg-warning-50 text-warning-800 border border-warning-200'
+                }`}>
+                  {partAvailability.message}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  Détails supplémentaires (optionnel)
                 </label>
                 <textarea
-                  placeholder="Décrivez le problème que vous rencontrez avec votre appareil. Soyez le plus précis possible pour nous aider à diagnostiquer rapidement."
+                  placeholder="Si vous avez d'autres problèmes ou des détails à ajouter, décrivez-les ici."
                   value={formData.issue_description}
                   onChange={(e) => updateFormData('issue_description', e.target.value)}
-                  className="input-field w-full h-32 resize-none"
-                  required
+                  className="input-field w-full h-24 resize-none"
                 />
-                {errors.issue_description && (
-                  <p className="mt-1 text-sm text-error-600">{errors.issue_description}</p>
-                )}
               </div>
 
               <div>
@@ -229,13 +313,19 @@ const RepairForm = () => {
                   <span className="font-medium">{formData.device_type === 'phone' ? 'Téléphone' : 'Ordinateur'} {formData.device_model}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-neutral-600">Problème principal:</span>
+                  <span className="font-medium">{issueTypes.find(i => i.key === formData.issue_type)?.label || 'Non spécifié'}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-neutral-600">Priorité:</span>
                   <span className="font-medium capitalize bg-primary-50 text-primary-700 px-2 py-0.5 rounded-md text-sm">{formData.priority}</span>
                 </div>
-                <div className="border-t border-neutral-200/80 pt-4">
-                  <div className="text-neutral-600 mb-2">Problème:</div>
-                  <p className="text-sm bg-neutral-50 p-3 rounded-lg border border-neutral-200/80">{formData.issue_description}</p>
-                </div>
+                {formData.issue_description && (
+                  <div className="border-t border-neutral-200/80 pt-4">
+                    <div className="text-neutral-600 mb-2">Détails supplémentaires:</div>
+                    <p className="text-sm bg-neutral-50 p-3 rounded-lg border border-neutral-200/80">{formData.issue_description}</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

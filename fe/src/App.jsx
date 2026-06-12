@@ -20,8 +20,11 @@ import TrackRepair from '@/pages/TrackRepair.jsx';
 
 // Lazy load heavy components
 const ClientDashboard = lazy(() => import('@/pages/ClientDashboard.jsx'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage.jsx'));
 const AdminDashboard = lazy(() => import('@/pages/AdminDashboard.jsx'));
 const StockManagement = lazy(() => import('@/pages/StockManagement.jsx'));
+const PurchaseOrderManagement = lazy(() => import('@/pages/PurchaseOrderManagement.jsx'));
+const CreatePurchaseOrder = lazy(() => import('@/pages/CreatePurchaseOrder.jsx'));
 
 function App() {
   return (
@@ -46,6 +49,7 @@ function App() {
                 <Route path="repair" element={<RepairForm />} />
                 <Route path="booking" element={<BookingSystem />} />
                 <Route path="track" element={<TrackRepair />} /> {/* Nested TrackRepair for clients */}
+                <Route path="settings" element={<SettingsPage />} /> {/* Add the settings page route */}
                 {/* The general /track route remains public, but clients can access it via specific links */}
               </Route>
 
@@ -53,19 +57,13 @@ function App() {
               {/* These are now covered by the /client nested routes above */}
 
               {/* Admin Protected Routes with AdminLayout */}
-              <Route path="/admin" element={
-                <ProtectedRoute adminOnly={true}>
-                  <AdminLayout />
-                </ProtectedRoute>
-              } />
-              {/* Nested Admin Routes */}
               <Route path="/admin" element={<ProtectedRoute adminOnly={true}><AdminLayout /></ProtectedRoute>}>
                 <Route index element={<AdminDashboard />} /> {/* /admin will show AdminDashboard */}
                 <Route path="dashboard" element={<AdminDashboard />} />
-                {/* Temporarily pointing to AdminDashboard as "appointments" is not a direct page yet */}
-                <Route path="appointments" element={<AdminDashboard />} />
                 <Route path="repairs" element={<AllRepairs />} />
                 <Route path="stock" element={<StockManagement />} />
+                <Route path="orders" element={<PurchaseOrderManagement />} />
+                <Route path="orders/new" element={<CreatePurchaseOrder />} />
                 <Route path="devices/new" element={<AddDevice />} />
                 <Route path="parts/new" element={<AddPart />} />
                 <Route path="track" element={<TrackRepair />} /> {/* Nested TrackRepair for admins */}

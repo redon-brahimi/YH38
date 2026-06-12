@@ -5,7 +5,8 @@ export class Repair {
     this.client_id = data.client_id;
     this.device_type = data.device_type; // 'phone' or 'pc'
     this.device_model = data.device_model;
-    this.issue_description = data.issue_description;
+    this.issue_type = data.issue_type;
+    this.issue_description = data.issue_description; // Optional details
     this.status = data.status; // pending, in_progress, fixed, ready_for_pickup
     this.priority = data.priority; // low, normal, high, urgent
     this.estimated_cost = data.estimated_cost;
@@ -19,14 +20,15 @@ export class Repair {
     return `
       CREATE TABLE IF NOT EXISTS repairs (
         id SERIAL PRIMARY KEY,
-        client_id INTEGER REFERENCES clients(id),
-        device_type VARCHAR(100) NOT NULL,
+        client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+        device_type VARCHAR(100) NOT NULL CHECK (device_type IN ('phone', 'pc')),
         device_model VARCHAR(255) NOT NULL,
-        issue_description TEXT NOT NULL,
-        status VARCHAR(50) DEFAULT 'pending',
-        priority VARCHAR(20) DEFAULT 'normal',
-        estimated_cost DECIMAL(10,2),
-        actual_cost DECIMAL(10,2),
+        issue_type VARCHAR(100) NOT NULL,
+        issue_description TEXT,
+        status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'fixed', 'ready_for_pickup')),
+        priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+        estimated_cost DECIMAL(10,2) CHECK (estimated_cost >= 0),
+        actual_cost DECIMAL(10,2) CHECK (actual_cost >= 0),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -72,8 +74,8 @@ export class Repair {
       errors.push('Le modèle d\'appareil doit contenir au moins 2 caractères');
     }
 
-    if (!data.issue_description || data.issue_description.trim().length < 10) {
-      errors.push('La description du problème doit contenir au moins 10 caractères');
+    if (!data.issue_type || data.issue_type.trim().length < 2) {
+      errors.push('Le type de problème est requis.');
     }
 
     if (data.priority && !['low', 'normal', 'high', 'urgent'].includes(data.priority)) {

@@ -7,8 +7,10 @@ services:
       POSTGRES_USER: yh38_user
       POSTGRES_PASSWORD: "yh38_pass"
       POSTGRES_DB: yh38_local
-    ports:
-      - "5432:5432"
+    # The ports mapping is commented out to prevent external access to the database.
+    # The API service connects to the database over the internal Docker network.
+    # ports:
+    #  - "5432:5432"
     volumes:
       - yh38_pgdata:/var/lib/postgresql/data
     networks:
@@ -36,6 +38,19 @@ services:
       ALLOWED_ORIGINS: "http://localhost:5173"
       JWT_SECRET: "yh38-super-secret"
       FRONTEND_URL: "http://localhost:5173"
+
+      # Email & Environment Configuration
+      NODE_ENV: "development"
+      SENDGRID_API_KEY: "" # Leave blank for development to use Ethereal
+      FROM_EMAIL: "no-reply@espacecall.com"
+      FROM_NAME: "Espace Call"
+
+      # SMS (Twilio) Configuration
+      SMS_NOTIFICATIONS_ENABLED: "true" # Set to "false" to disable SMS
+      TWILIO_ACCOUNT_SID: "" # Your Twilio Account SID
+      TWILIO_AUTH_TOKEN: "" # Your Twilio Auth Token
+      TWILIO_PHONE_NUMBER: "" # Your Twilio phone number
+      TWILIO_WHATSAPP_NUMBER: "" # Your Twilio WhatsApp number
     ports:
       - "4000:4000"
     depends_on:

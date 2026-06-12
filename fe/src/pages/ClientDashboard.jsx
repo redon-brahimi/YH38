@@ -82,7 +82,9 @@ const ClientDashboard = () => {
                 {repair.device_type === 'phone' ? '📱 Téléphone' : '💻 Ordinateur'} {repair.device_model}
               </h3>
               <p className="text-neutral-600 text-sm mb-1">Code de suivi: <span className="font-mono font-medium">{repair.tracking_code}</span></p>
-              <p className="text-neutral-600 text-sm">Problème: {repair.issue_description.substring(0, 70)}{repair.issue_description.length > 70 ? '...' : ''}</p>
+              <p className="text-neutral-600 text-sm">
+                Problème: {repair.issue_description ? `${repair.issue_description.substring(0, 70)}${repair.issue_description.length > 70 ? '...' : ''}` : 'Non spécifié'}
+              </p>
             </div>
             <div className="mt-4 md:mt-0 md:ml-6 text-right">
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${

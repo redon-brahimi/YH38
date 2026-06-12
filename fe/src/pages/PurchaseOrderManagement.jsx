@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext.jsx';
 import toast from 'react-hot-toast';
 import Button from '@/components/Button.jsx';
+import { Link } from 'react-router-dom';
 
 const statusLabels = {
   draft: 'Brouillon',
@@ -22,13 +23,10 @@ const PurchaseOrderManagement = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
   const { authFetch } = useAuth();
 
-  useEffect(() => {
-    fetchOrders();
-  }, [authFetch]);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       const response = await authFetch('http://localhost:4000/api/admin/reorders');
@@ -44,6 +42,33 @@ const PurchaseOrderManagement = () => {
     } finally {
       setLoading(false);
     }
+  }, [authFetch]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  const handleViewOrder = async (order) => {
+    // Set basic order info immediately to open modal and show loading state for items
+    setSelectedOrder(order);
+    setModalLoading(true);
+
+    try {
+      const response = await authFetch(`http://localhost:4000/api/admin/reorders/${order.id}`);
+      const data = await response.json();
+      if (data.success) {
+        // The detailed order has items, update the selectedOrder state
+        setSelectedOrder(data.order);
+      } else {
+        toast.error(data.error || 'Impossible de charger les détails de la commande.');
+        setSelectedOrder(null); // Close modal on error
+      }
+    } catch (err) {
+      toast.error('Erreur de connexion.');
+      setSelectedOrder(null);
+    } finally {
+      setModalLoading(false);
+    }
   };
 
   const handleStatusChange = async (orderId, newStatus) => {
@@ -56,14 +81,14 @@ const PurchaseOrderManagement = () => {
       const data = await response.json();
 
       if (data.success) {
-        toast.success('Statut de la commande mis à jour.');
-        setOrders(prevOrders =>
-          prevOrders.map(order =>
-            order.id === orderId ? { ...order, status: newStatus } : order
-          )
-        );
+        if (newStatus === 'received') {
+          toast.success('Commande reçue et stock mis à jour !');
+        } else {
+          toast.success('Statut de la commande mis à jour.');
+        }
+        fetchOrders(); // Re-fetch the list to reflect any changes from the backend
         if (selectedOrder && selectedOrder.id === orderId) {
-          setSelectedOrder({ ...selectedOrder, status: newStatus });
+          setSelectedOrder(prev => ({ ...prev, status: newStatus }));
         }
       } else {
         toast.error(data.error || 'Failed to update order status.');
@@ -99,6 +124,9 @@ const PurchaseOrderManagement = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-secondary-900">Gestion des Commandes</h1>
+        <Link to="/admin/orders/new">
+          <Button>Créer une Commande</Button>
+        </Link>
       </div>
 
       {loading ? (
@@ -111,7 +139,7 @@ const PurchaseOrderManagement = () => {
             <div
               key={order.id}
               className="bg-white rounded-lg border border-neutral-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setSelectedOrder(order)}
+              onClick={() => handleViewOrder(order)}
             >
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div className="flex-1">
@@ -129,7 +157,7 @@ const PurchaseOrderManagement = () => {
 
                 <div className="flex flex-col items-end gap-2">
                   <p className="text-lg font-semibold text-secondary-900">
-                    {order.total_cost.toFixed(2)} €
+                    {Number(order.total_cost).toFixed(2)} €
                   </p>
                   <p className="text-xs text-neutral-600">
                     {order.item_count || 0} article{order.item_count !== 1 ? 's' : ''}
@@ -206,19 +234,22 @@ const PurchaseOrderManagement = () => {
               <div>
                 <h3 className="text-lg font-semibold text-secondary-900 mb-3">Articles</h3>
                 <div className="space-y-2">
-                  {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                  {modalLoading ? (
+                    <p className="text-neutral-600">Chargement des articles...</p>
+                  ) : selectedOrder.items && selectedOrder.items.length > 0 ? (
                     selectedOrder.items.map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center bg-neutral-50 rounded-lg p-3">
                         <div className="flex-1">
                           <p className="font-semibold text-secondary-900">{item.part_name}</p>
                           <p className="text-xs text-neutral-600">{item.device_name}</p>
+                          {item.note && <p className="text-xs text-neutral-500 italic mt-1">Note: {item.note}</p>}
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-semibold">
-                            {item.quantity} × {item.unit_price.toFixed(2)} €
+                            {item.quantity} × {Number(item.unit_price).toFixed(2)} €
                           </p>
                           <p className="text-xs text-neutral-600">
-                            Total: {(item.quantity * item.unit_price).toFixed(2)} €
+                            Total: {(item.quantity * Number(item.unit_price)).toFixed(2)} €
                           </p>
                         </div>
                       </div>
@@ -233,7 +264,7 @@ const PurchaseOrderManagement = () => {
               <div className="border-t border-neutral-200 pt-4">
                 <div className="flex justify-between items-center">
                   <p className="text-lg font-semibold text-secondary-900">Montant total</p>
-                  <p className="text-2xl font-bold text-primary-600">{selectedOrder.total_cost.toFixed(2)} €</p>
+                  <p className="text-2xl font-bold text-primary-600">{Number(selectedOrder.total_cost).toFixed(2)} €</p>
                 </div>
               </div>
             </div>

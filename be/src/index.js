@@ -1,115 +1,67 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import pkg from 'pg';
-const { Pool } = pkg;
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import repairRoutes from './routes/repairs.js';
+import logger from './logger.js';
+
+// Import all routers
 import authRoutes from './routes/auth.js';
-import adminRoutes from './routes/admin.js'; // New admin routes
+import repairRoutes from './routes/repairs.js';
+import adminRoutes from './routes/admin.js';
 import appointmentRoutes from './routes/appointments.js';
+import userRoutes from './routes/users.js'; // The missing piece
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 const app = express();
+const PORT = process.env.PORT || 4000;
 
-// Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+// --- Middlewares ---
+app.use(helmet()); // Apply basic security headers
 
-// Test database connection
-pool.on('connect', () => {
-  console.log('📊 Connected to YH38 database');
-});
+// CORS configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+app.use(cors({ origin: allowedOrigins }));
 
-pool.on('error', (err) => {
-  console.error('❌ Database connection error:', err);
-});
-
-// Middleware
-app.use(helmet());
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
-  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
-
+// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize database tables
-async function initializeDatabase() {
-  try {
-    // Import models
-    const { Client } = await import('./models/Client.js');
-    const { Device } = await import('./models/Device.js');
-    const { Part } = await import('./models/Part.js');
-    const { Supplier } = await import('./models/Supplier.js');
-    const { PurchaseOrder } = await import('./models/PurchaseOrder.js');
-    const { PurchaseOrderItem } = await import('./models/PurchaseOrderItem.js');
-    const { Admin } = await import('./models/Admin.js');
-    const { Repair } = await import('./models/Repair.js');
-    const { Appointment } = await import('./models/Appointment.js');
-
-    // Create tables
-    await pool.query(Client.createTableQuery);
-    await pool.query(Admin.createTableQuery);
-    await pool.query(Device.createTableQuery);
-    await pool.query(Part.createTableQuery);
-    await pool.query(Supplier.createTableQuery);
-    await pool.query(PurchaseOrder.createTableQuery);
-    await pool.query(PurchaseOrderItem.createTableQuery);
-    await pool.query(Repair.createTableQuery);
-    await pool.query(Appointment.createTableQuery);
-
-    console.log('✅ Database tables initialized');
-  } catch (error) {
-    console.error('❌ Error initializing database:', error);
-  }
-}
-
-// Routes
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'YH38 API is running' });
-});
-
-// API routes
+// --- API Routes ---
 app.use('/api/auth', authRoutes);
 app.use('/api/repairs', repairRoutes);
-app.use('/api/admin', adminRoutes); // New admin routes
+app.use('/api/admin', adminRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/users', userRoutes); // This line fixes the "Route not found" error
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// --- Health Check ---
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date() });
 });
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+// --- Error Handling ---
+// 404 Not Found Handler
+app.use((req, res, next) => {
+  const error = new Error(`Route not found - ${req.method} ${req.originalUrl}`);
+  logger.warn(error.message, { url: req.originalUrl, method: req.method });
+  res.status(404).json({ success: false, error: error.message });
 });
 
-const PORT = process.env.PORT || 4000;
-
-// Initialize database and start server
-initializeDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 YH38 API server running on port ${PORT}`);
+// Global Error Handler
+app.use((error, req, res, next) => {
+  logger.error(error.message, {
+    stack: error.stack,
+    url: req.originalUrl,
+    method: req.method,
+  });
+  res.status(500).json({
+    success: false,
+    error: 'Internal Server Error',
   });
 });
+
+app.listen(PORT, () => {
+  logger.info(`Server is running on port ${PORT}`);
+});
+
+export default app;

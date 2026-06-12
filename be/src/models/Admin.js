@@ -4,6 +4,7 @@ export class Admin {
     this.id = data.id;
     this.name = data.name;
     this.email = data.email;
+    this.phone = data.phone;
     this.password = data.password; // This will be the hash
     this.role = data.role || 'admin';
     this.created_at = data.created_at;
@@ -16,6 +17,7 @@ export class Admin {
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
+        phone VARCHAR(50),
         password VARCHAR(255) NOT NULL,
         reset_password_token VARCHAR(255),
         reset_password_expires TIMESTAMP,

@@ -90,7 +90,7 @@ const AdminDashboard = () => {
   const statusCounts = summary?.repairsByStatus || {};
   const maxStatusCount = Math.max(...Object.values(statusCounts), 1);
 
-  return (
+  return ( 
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <h1 className="text-3xl font-bold text-secondary-900 mb-8">Tableau de Bord Administrateur</h1>
 
@@ -192,7 +192,9 @@ const AdminDashboard = () => {
                     <div className="flex-1">
                       <p className="font-semibold text-primary-700">{app.client_name}</p>
                       <p className="text-sm text-neutral-600">{app.device_type === 'phone' ? '📱' : '💻'} {app.device_model}</p>
-                      <p className="text-xs text-neutral-500 mt-1">{app.issue_description.substring(0, 80)}...</p>
+                      <p className="text-xs text-neutral-500 mt-1">
+                        {app.issue_description ? `${app.issue_description.substring(0, 80)}${app.issue_description.length > 80 ? '...' : ''}` : 'Aucune description'}
+                      </p>
                     </div>
                     <div className="flex flex-col items-start md:items-end gap-3 text-left md:text-right">
                       <p className="font-bold text-secondary-800">

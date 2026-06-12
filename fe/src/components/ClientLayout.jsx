@@ -7,7 +7,7 @@ const ClientLayout = () => {
   const clientNavLinks = [
     { path: '/client/dashboard', label: 'Mes Réparations', icon: '🔧' },
     { path: '/client/repair', label: 'Nouvelle Réparation', icon: '📝' },
-    // Add other client links here as they are created
+    { path: '/client/settings', label: 'Paramètres', icon: '⚙️' },
   ];
 
   return (

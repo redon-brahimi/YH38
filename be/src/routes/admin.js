@@ -1,7 +1,9 @@
 import express from 'express';
 import pkg from 'pg';
-import { protect, authorize } from '../auth.js';
+import logger from '../logger.js';
+import { protect } from '../auth.js';
 const { Pool } = pkg;
+import { dispatchRepairStatusUpdate } from '../services/notificationService.js';
 
 const router = express.Router();
 
@@ -13,6 +15,16 @@ import { getRepairDetailsById } from './repairs.js'; // Import the helper functi
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+// Middleware to authorize admin roles
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user || !req.user.role || !roles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, error: `User role '${req.user.role}' is not authorized to access this route` });
+    }
+    next();
+  };
+};
 
 // Middleware to protect and authorize admin routes
 router.use(protect, authorize('admin', 'technician'));
@@ -48,7 +60,7 @@ router.get('/appointments', async (req, res) => {
 
     res.json({ success: true, appointments: result.rows });
   } catch (error) {
-    console.error('Error fetching all appointments:', error);
+    logger.error('Error fetching all appointments:', { error, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching appointments.' });
   }
 });
@@ -89,7 +101,7 @@ router.get('/dashboard/summary', async (req, res) => {
       lowStockParts: lowStockListResult.rows,
     });
   } catch (error) {
-    console.error('Error fetching dashboard summary:', error);
+    logger.error('Error fetching dashboard summary:', { error, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching dashboard summary.' });
   }
 });
@@ -101,18 +113,54 @@ router.get('/dashboard/summary', async (req, res) => {
 // GET /api/admin/repairs - Get all repair tickets
 router.get('/repairs', async (req, res) => {
   try {
+    // This query is more efficient than fetching IDs and then looping.
+    // It gets all repair data, including the latest appointment for each, in one go.
     const result = await pool.query(`
-      SELECT id FROM repairs ORDER BY created_at DESC
+      SELECT
+        r.id, r.client_id, r.device_type, r.device_model, r.issue_type, r.issue_description,
+        r.status, r.priority, r.estimated_cost, r.actual_cost, r.created_at, r.updated_at,
+        c.name as client_name, c.email as client_email, c.phone as client_phone,
+        d.id as device_id,
+        app.appointment_date, app.appointment_time, app.status as appointment_status, app.notes as appointment_notes
+      FROM repairs r
+      JOIN clients c ON r.client_id = c.id
+      LEFT JOIN devices d ON d.name = r.device_model AND d.type = r.device_type
+      LEFT JOIN (
+        SELECT *, ROW_NUMBER() OVER(PARTITION BY repair_id ORDER BY appointment_date DESC, appointment_time DESC) as rn
+        FROM appointments
+      ) app ON r.id = app.repair_id AND app.rn = 1
+      ORDER BY r.created_at DESC
     `);
 
-    // Use the helper function to get full details for each repair
-    const repairs = await Promise.all(result.rows.map(async (row) => {
-      return await getRepairDetailsById(row.id);
+    const statusMap = {
+      'pending': 'En attente',
+      'in_progress': 'En cours de réparation',
+      'fixed': 'Réparé',
+      'ready_for_pickup': 'Prêt pour récupération'
+    };
+
+    const repairs = result.rows.map(repair => ({
+      id: repair.id,
+      tracking_code: `YH38-${repair.id.toString().padStart(6, '0')}`,
+      status: repair.status,
+      status_french: statusMap[repair.status] || repair.status,
+      device_type: repair.device_type,
+      device_model: repair.device_model,
+      device_id: repair.device_id,
+      issue_type: repair.issue_type,
+      issue_description: repair.issue_description,
+      priority: repair.priority,
+      estimated_cost: repair.estimated_cost,
+      actual_cost: repair.actual_cost,
+      created_at: repair.created_at,
+      updated_at: repair.updated_at,
+      client: { name: repair.client_name, email: repair.client_email, phone: repair.client_phone },
+      appointment: repair.appointment_date ? { date: repair.appointment_date, time: repair.appointment_time, status: repair.appointment_status, notes: repair.appointment_notes } : null
     }));
 
     res.json({ success: true, repairs });
   } catch (error) {
-    console.error('Error fetching all repairs for admin:', error);
+    logger.error('Error fetching all repairs for admin:', { error, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching all repairs.' });
   }
 });
@@ -146,16 +194,16 @@ router.put('/repairs/:id', async (req, res) => {
 
     // After all updates, fetch the complete, correctly-structured repair details to return to the frontend
     const detailedResult = await client.query(`
-      SELECT r.id, r.client_id,
-             c.name as client_name, c.email as client_email, c.phone as client_phone,
-             r.device_type, r.device_model, r.issue_description,
+      SELECT r.id, r.client_id, 
+             c.name as client_name, c.email as client_email, c.phone as client_phone, c.notification_preference,
+             r.device_type, r.device_model, r.issue_type, r.issue_description,
              r.status, r.priority, r.estimated_cost, r.actual_cost,
              r.created_at, r.updated_at,
              a.appointment_date, a.appointment_time, a.status as appointment_status,
              a.notes as appointment_notes,
              (SELECT id FROM devices WHERE name = r.device_model AND type = r.device_type) as device_id
       FROM repairs r
-      JOIN clients c ON r.client_id = c.id
+      LEFT JOIN clients c ON r.client_id = c.id
       LEFT JOIN appointments a ON r.id = a.repair_id
       WHERE r.id = $1
     `, [id]);
@@ -174,104 +222,39 @@ router.put('/repairs/:id', async (req, res) => {
       tracking_code: `YH38-${updatedRepairData.id.toString().padStart(6, '0')}`,
       status_french: statusMap[updatedRepairData.status] || updatedRepairData.status,
       client: {
+        // This is the user object for the notification service
+        id: updatedRepairData.client_id, // This is the client's ID
         name: updatedRepairData.client_name,
         email: updatedRepairData.client_email,
         phone: updatedRepairData.client_phone,
+        notification_preference: updatedRepairData.notification_preference,
       },
       appointment: updatedRepairData.appointment_date ? { date: updatedRepairData.appointment_date, time: updatedRepairData.appointment_time, status: updatedRepairData.appointment_status, notes: updatedRepairData.appointment_notes } : null
     };
+    // Clean up the top-level object to avoid redundant client data in the final JSON response
     delete responseRepair.client_name;
     delete responseRepair.client_email;
     delete responseRepair.client_phone;
+    delete responseRepair.client_id;
+    delete responseRepair.notification_preference;
 
     await client.query('COMMIT');
-    res.json({ success: true, repair: responseRepair, message: 'Repair updated successfully.' });
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error updating repair:', error);
-    res.status(500).json({ success: false, error: 'Server error during repair update.' });
-  } finally {
-    if (client) { // Ensure client exists before releasing
-      client.release();
-    }
-  }
-});
 
-// ================================================
-// REPAIR MANAGEMENT
-// ================================================
-
-// PUT /api/admin/repairs/:id - Update repair details (status, costs, etc.)
-router.put('/repairs/:id', async (req, res) => {
-  const { id } = req.params;
-  const { status, part_id } = req.body; // Destructure status and part_id from req.body
-  let client; // Declare client here so it's accessible in finally
-  try {
-    client = await pool.connect(); // Connect inside the try block
-    await client.query('BEGIN');
-
+    // Asynchronously send notifications if the status was updated
     if (status) {
-      if (!['pending', 'in_progress', 'fixed', 'ready_for_pickup'].includes(status)) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, error: 'Invalid status provided.' });
-      }
-      await client.query('UPDATE repairs SET status = $1, updated_at = NOW() WHERE id = $2', [status, id]); // Perform the update
+      dispatchRepairStatusUpdate(responseRepair.client, {
+        trackingCode: responseRepair.tracking_code,
+        status: responseRepair.status_french,
+        deviceModel: responseRepair.device_model,
+      });
     }
 
-    if (status === 'fixed' && part_id) {
-      try {
-        await Part.decrementStock(client, part_id);
-      } catch (stockError) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ success: false, error: stockError.message });
-      }
-    }
-
-    // After all updates, fetch the complete, correctly-structured repair details to return to the frontend
-    const detailedResult = await client.query(`
-      SELECT r.id, r.client_id,
-             c.name as client_name, c.email as client_email, c.phone as client_phone,
-             r.device_type, r.device_model, r.issue_description,
-             r.status, r.priority, r.estimated_cost, r.actual_cost,
-             r.created_at, r.updated_at,
-             a.appointment_date, a.appointment_time, a.status as appointment_status,
-             a.notes as appointment_notes,
-             (SELECT id FROM devices WHERE name = r.device_model AND type = r.device_type) as device_id
-      FROM repairs r
-      JOIN clients c ON r.client_id = c.id
-      LEFT JOIN appointments a ON r.id = a.repair_id
-      WHERE r.id = $1
-    `, [id]);
-
-    if (detailedResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ success: false, error: 'Repair not found after update.' });
-    }
-
-    const updatedRepairData = detailedResult.rows[0];
-
-    // Re-shape the data to match the GET endpoint's structure (with a nested client object)
-    const statusMap = { 'pending': 'En attente', 'in_progress': 'En cours de réparation', 'fixed': 'Réparé', 'ready_for_pickup': 'Prêt pour récupération' };
-    const responseRepair = {
-      ...updatedRepairData,
-      tracking_code: `YH38-${updatedRepairData.id.toString().padStart(6, '0')}`,
-      status_french: statusMap[updatedRepairData.status] || updatedRepairData.status,
-      client: {
-        name: updatedRepairData.client_name,
-        email: updatedRepairData.client_email,
-        phone: updatedRepairData.client_phone,
-      },
-      appointment: updatedRepairData.appointment_date ? { date: updatedRepairData.appointment_date, time: updatedRepairData.appointment_time, status: updatedRepairData.appointment_status, notes: updatedRepairData.appointment_notes } : null
-    };
-    delete responseRepair.client_name;
-    delete responseRepair.client_email;
-    delete responseRepair.client_phone;
-
-    await client.query('COMMIT');
     res.json({ success: true, repair: responseRepair, message: 'Repair updated successfully.' });
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error updating repair:', error);
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    logger.error('Error updating repair:', { error, body: req.body, user: req.user, repairId: id });
     res.status(500).json({ success: false, error: 'Server error during repair update.' });
   } finally {
     if (client) { // Ensure client exists before releasing
@@ -303,7 +286,7 @@ router.post('/devices', async (req, res) => {
     );
     res.status(201).json({ success: true, device: result.rows[0] });
   } catch (error) {
-    console.error('Error adding device:', error);
+    logger.error('Error adding device:', { error, body: req.body, user: req.user });
     if (error.code === '23505') { // Unique violation
       return res.status(409).json({ success: false, error: 'Device with this name already exists.' });
     }
@@ -317,7 +300,7 @@ router.get('/devices', async (req, res) => {
     const result = await pool.query('SELECT * FROM devices ORDER BY name ASC');
     res.json({ success: true, devices: result.rows });
   } catch (error) {
-    console.error('Error fetching devices:', error);
+    logger.error('Error fetching devices:', { error, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching devices.' });
   }
 });
@@ -328,7 +311,7 @@ router.get('/devices', async (req, res) => {
 
 // POST /api/admin/parts - Add a new part
 router.post('/parts', async (req, res) => {
-  const { name, device_id, stock_quantity = 0 } = req.body;
+  const { name, device_id, stock_quantity = 0, price = 0 } = req.body;
 
   if (!name || !device_id) {
     return res.status(400).json({ success: false, error: 'Part name and device ID are required.' });
@@ -336,12 +319,12 @@ router.post('/parts', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'INSERT INTO parts (name, device_id, stock_quantity) VALUES ($1, $2, $3) RETURNING *',
-      [name, device_id, stock_quantity]
+      'INSERT INTO parts (name, device_id, stock_quantity, price) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, device_id, stock_quantity, price]
     );
     res.status(201).json({ success: true, part: result.rows[0] });
   } catch (error) {
-    console.error('Error adding part:', error);
+    logger.error('Error adding part:', { error, body: req.body, user: req.user });
     if (error.code === '23503') { // Foreign key violation
       return res.status(400).json({ success: false, error: 'Device not found.' });
     }
@@ -363,7 +346,7 @@ router.get('/parts', async (req, res) => {
     `);
     res.json({ success: true, parts: result.rows });
   } catch (error) {
-    console.error('Error fetching parts:', error);
+    logger.error('Error fetching parts:', { error, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching parts.' });
   }
 });
@@ -378,33 +361,70 @@ router.get('/parts/by-device/:device_id', async (req, res) => {
     );
     res.json({ success: true, parts: result.rows });
   } catch (error) {
-    console.error('Error fetching parts by device:', error);
+    logger.error('Error fetching parts by device:', { error, deviceId: req.params.device_id, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching parts by device.' });
   }
 });
 
-const findOrCreateSupplier = async (client, { name, contact_email, contact_phone }) => {
-  if (!name) return null;
+// POST /api/admin/parts/check-availability - Check if a part for a repair is in stock
+router.post('/parts/check-availability', async (req, res) => {
+  const { device_model, issue_type } = req.body;
 
-  const existing = await client.query('SELECT * FROM suppliers WHERE name = $1', [name]);
-  if (existing.rows.length > 0) {
-    return existing.rows[0];
+  if (!device_model || !issue_type) {
+    return res.status(400).json({ success: false, error: 'Device model and issue type are required.' });
   }
 
-  const insert = await client.query(
-    'INSERT INTO suppliers (name, contact_email, contact_phone) VALUES ($1, $2, $3) RETURNING *',
-    [name, contact_email || null, contact_phone || null]
-  );
-  return insert.rows[0];
-};
+  // A mapping from the frontend issue_type to a search term for the database.
+  const partTypeMapping = {
+    'ecran': 'Écran',
+    'batterie': 'Batterie',
+    'flash': 'Flash',
+    'connecteur': 'Connecteur',
+    'boutons': 'Bouton', // Will match "Bouton Power", "Bouton Volume"
+    'camera_avant': 'Caméra Avant',
+    'camera_arriere': 'Caméra Arrière',
+    'micro': 'Micro',
+    'arriere': 'Arrière', // Matches "Vitre arrière"
+    'ecouteur_interne': 'Écouteur interne',
+    'haut_parleur': 'Haut-parleur',
+    'lecteur_sim': 'Lecteur SIM',
+    'capteur_proximite': 'Capteur de proximité',
+  };
+
+  const searchTerm = partTypeMapping[issue_type];
+
+  if (!searchTerm) {
+    return res.json({ success: true, available: null, message: 'Le type de pièce n\'est pas standard, la disponibilité ne peut être vérifiée automatiquement.' });
+  }
+
+  try {
+    const deviceResult = await pool.query('SELECT id FROM devices WHERE name = $1', [device_model]);
+    if (deviceResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Appareil non trouvé dans la base de données.' });
+    }
+    const deviceId = deviceResult.rows[0].id;
+
+    const partResult = await pool.query('SELECT name, stock_quantity FROM parts WHERE device_id = $1 AND name ILIKE $2', [deviceId, `%${searchTerm}%`]);
+
+    if (partResult.rows.length > 0 && partResult.rows[0].stock_quantity > 0) {
+      const part = partResult.rows[0];
+      res.json({ success: true, available: true, message: `Pièce disponible (${part.name}). Stock: ${part.stock_quantity}` });
+    } else {
+      res.json({ success: true, available: false, message: 'Pièce non disponible ou hors stock. Commande spéciale peut être nécessaire.' });
+    }
+  } catch (error) {
+    logger.error('Error checking part availability:', { error, body: req.body });
+    res.status(500).json({ success: false, error: 'Server error checking part availability.' });
+  }
+});
 
 // GET /api/admin/suppliers - Get all suppliers
 router.get('/suppliers', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM suppliers ORDER BY name ASC');
-    res.json({ success: true, suppliers: result.rows });
+    const suppliers = await Supplier.getAll();
+    res.json({ success: true, suppliers });
   } catch (error) {
-    console.error('Error fetching suppliers:', error);
+    logger.error('Error fetching suppliers:', { error, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching suppliers.' });
   }
 });
@@ -423,7 +443,7 @@ router.get('/reorders/low-stock', async (req, res) => {
     `, [threshold]);
     res.json({ success: true, parts: result.rows });
   } catch (error) {
-    console.error('Error fetching low stock parts:', error);
+    logger.error('Error fetching low stock parts:', { error, threshold, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching low stock parts.' });
   }
 });
@@ -444,13 +464,12 @@ router.post('/reorders', async (req, res) => {
 
     let supplier = null;
     if (supplier_id) {
-      const supplierResult = await client.query('SELECT * FROM suppliers WHERE id = $1', [supplier_id]);
-      if (supplierResult.rows.length === 0) {
+      supplier = await Supplier.findById(supplier_id, client);
+      if (!supplier) {
         throw new Error('Fournisseur introuvable.');
       }
-      supplier = supplierResult.rows[0];
     } else if (supplier_name) {
-      supplier = await findOrCreateSupplier(client, { name: supplier_name, contact_email, contact_phone });
+      supplier = await Supplier.findOrCreate(client, { name: supplier_name, contact_email, contact_phone });
     }
 
     const orderResult = await client.query(
@@ -502,7 +521,7 @@ router.post('/reorders', async (req, res) => {
     });
   } catch (error) {
     if (client) await client.query('ROLLBACK');
-    console.error('Error creating purchase order:', error);
+    logger.error('Error creating purchase order:', { error, body: req.body, user: req.user });
     res.status(500).json({ success: false, error: error.message || 'Server error creating purchase order.' });
   } finally {
     if (client) client.release();
@@ -521,7 +540,7 @@ router.get('/reorders', async (req, res) => {
     `);
     res.json({ success: true, orders: result.rows });
   } catch (error) {
-    console.error('Error fetching purchase orders:', error);
+    logger.error('Error fetching purchase orders:', { error, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching purchase orders.' });
   }
 });
@@ -552,7 +571,7 @@ router.get('/reorders/:id', async (req, res) => {
 
     res.json({ success: true, order: { ...result.rows[0], items: itemsResult.rows } });
   } catch (error) {
-    console.error('Error fetching purchase order:', error);
+    logger.error('Error fetching purchase order:', { error, orderId: id, user: req.user });
     res.status(500).json({ success: false, error: 'Server error fetching purchase order.' });
   }
 });
@@ -567,20 +586,51 @@ router.put('/reorders/:id', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Status invalide.' });
   }
 
+  const client = await pool.connect();
+
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    // Get the current order to check its status before updating
+    const currentOrderResult = await client.query('SELECT * FROM purchase_orders WHERE id = $1', [id]);
+    if (currentOrderResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, error: 'Commande introuvable.' });
+    }
+    const currentOrder = currentOrderResult.rows[0];
+
+    // If the status is changing to 'received' and it wasn't 'received' before, update stock
+    if (status === 'received' && currentOrder.status !== 'received') {
+      const itemsResult = await client.query('SELECT * FROM purchase_order_items WHERE purchase_order_id = $1', [id]);
+      const items = itemsResult.rows;
+
+      // Use Promise.all to update all parts stock concurrently
+      await Promise.all(items.map(item => {
+        if (item.part_id && item.quantity > 0) {
+          return client.query(
+            'UPDATE parts SET stock_quantity = stock_quantity + $1 WHERE id = $2',
+            [item.quantity, item.part_id]
+          );
+        }
+        return Promise.resolve(); // If no part_id or quantity, do nothing
+      }));
+    }
+
+    // Now, update the order status
+    const result = await client.query(
       'UPDATE purchase_orders SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
       [status, id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Commande introuvable.' });
-    }
+    await client.query('COMMIT');
 
     res.json({ success: true, order: result.rows[0] });
   } catch (error) {
-    console.error('Error updating purchase order:', error);
+    if (client) await client.query('ROLLBACK');
+    logger.error('Error updating purchase order:', { error, body: req.body, orderId: id, user: req.user });
     res.status(500).json({ success: false, error: 'Server error updating purchase order.' });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -613,7 +663,7 @@ router.put('/parts/:id/stock', async (req, res) => {
 
     res.json({ success: true, part: result.rows[0] });
   } catch (error) {
-    console.error('Error updating part stock:', error);
+    logger.error('Error updating part stock:', { error, body: req.body, partId: id, user: req.user });
     res.status(500).json({ success: false, error: 'Server error updating part stock.' });
   }
 });
@@ -631,7 +681,7 @@ router.delete('/parts/:id', async (req, res) => {
 
     res.json({ success: true, message: 'Part deleted successfully.' });
   } catch (error) {
-    console.error('Error deleting part:', error);
+    logger.error('Error deleting part:', { error, partId: id, user: req.user });
     res.status(500).json({ success: false, error: 'Server error deleting part.' });
   }
 });

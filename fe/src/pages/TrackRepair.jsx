@@ -5,9 +5,10 @@ import Button from '@/components/Button.jsx'; // Ensure Button is imported
 import Modal from '@/components/Modal.jsx'; // Assuming you have a Modal component
 import Input from '@/components/Input.jsx';
 import toast from 'react-hot-toast';
+import api from '@/utils/api.js';
 
 const TrackRepair = () => {
-  const { user, authFetch } = useAuth();
+  const { user } = useAuth();
   const [trackingCode, setTrackingCode] = useState('');
   const [repair, setRepair] = useState(null);
   const [initialRepairFetched, setInitialRepairFetched] = useState(false); // New state to track initial fetch
@@ -36,8 +37,8 @@ const TrackRepair = () => {
     setInitialRepairFetched(false); // Reset for new search
     setIsEditing(false);
     try {
-      const repairResponse = await fetch(`http://localhost:4000/api/repairs/${code.toUpperCase()}`);
-      const repairData = await repairResponse.json();
+      const repairResponse = await api.get(`/repairs/${code.toUpperCase()}`);
+      const repairData = repairResponse.data;
 
       if (repairData.success) {
         const currentRepair = repairData.repair;
@@ -52,8 +53,8 @@ const TrackRepair = () => {
         });
 
         if (currentRepair.device_id) {
-          const partsResponse = await authFetch(`http://localhost:4000/api/admin/parts/by-device/${currentRepair.device_id}`);
-          const partsData = await partsResponse.json();
+          const partsResponse = await api.get(`/admin/parts/by-device/${currentRepair.device_id}`);
+          const partsData = partsResponse.data;
           if (partsData.success) {
             setPartsForDevice(partsData.parts);
           }
@@ -71,7 +72,7 @@ const TrackRepair = () => {
     } finally {
       setLoading(false);
     }
-  }, [authFetch, trackingCode]); // Added trackingCode to dependencies
+  }, [trackingCode]);
 
   const handleSave = () => {
     // If status is being set to 'fixed' and there are parts available, prompt the user to select one.
@@ -94,11 +95,8 @@ const TrackRepair = () => {
         payload.part_id = partIdOverride;
       }
 
-      const response = await authFetch(`http://localhost:4000/api/admin/repairs/${repair.id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json();
+      const response = await api.put(`/admin/repairs/${repair.id}`, payload);
+      const data = response.data;
 
       if (data.success) {
         toast.success('Détails de la réparation mis à jour.');
@@ -253,7 +251,7 @@ const TrackRepair = () => {
             </div>
           )}
 
-          {!repair.appointment && !isEditing && (
+          {!repair.appointment && !isEditing && user?.type !== 'admin' && (
             <div className="mt-8 text-center">
               <Button onClick={() => window.location.href = `/booking?code=${repair.tracking_code}`}>
                 Prendre un Rendez-vous

@@ -11,6 +11,7 @@ const AddPart = () => {
     name: '',
     device_id: '',
     stock_quantity: 0,
+    price: 0,
   });
   const [loading, setLoading] = useState(false);
   const { authFetch } = useAuth();
@@ -91,6 +92,15 @@ const AddPart = () => {
           type="number"
           name="stock_quantity"
           value={formData.stock_quantity}
+          onChange={handleChange}
+          required
+        />
+        <Input
+          label="Prix unitaire (€)"
+          type="number"
+          step="0.01"
+          name="price"
+          value={formData.price}
           onChange={handleChange}
           required
         />

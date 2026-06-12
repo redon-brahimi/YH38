@@ -17,14 +17,17 @@ export class Appointment {
     return `
       CREATE TABLE IF NOT EXISTS appointments (
         id SERIAL PRIMARY KEY,
-        repair_id INTEGER REFERENCES repairs(id),
-        client_id INTEGER REFERENCES clients(id),
+        repair_id INTEGER REFERENCES repairs(id) ON DELETE CASCADE,
+        client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
         appointment_date DATE NOT NULL,
         appointment_time TIME NOT NULL,
-        duration_minutes INTEGER DEFAULT 60,
-        status VARCHAR(50) DEFAULT 'scheduled',
+        duration_minutes INTEGER DEFAULT 60 CHECK (duration_minutes >= 15 AND duration_minutes <= 480),
+        status VARCHAR(50) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'confirmed', 'completed', 'cancelled')),
         notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        -- Ensure no overlapping appointments
+        UNIQUE(appointment_date, appointment_time)
       )
     `;
   }

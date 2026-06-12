@@ -1,39 +1,34 @@
-// Part model for YH38 repair management system
+import pkg from 'pg';
+const { Pool } = pkg;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
 export class Part {
-  constructor(data) {
-    this.id = data.id;
-    this.name = data.name;
-    this.device_id = data.device_id;
-    this.stock_quantity = data.stock_quantity;
-    this.created_at = data.created_at;
-  }
-
-  // Static method to create table
-  static get createTableQuery() {
-    return `
-      CREATE TABLE IF NOT EXISTS parts (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        device_id INTEGER REFERENCES devices(id) ON DELETE CASCADE,
-        stock_quantity INTEGER DEFAULT 0 CHECK (stock_quantity >= 0),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(name, device_id)
-      )
-    `;
-  }
-
-  // Static method to safely decrement stock
+  /**
+   * Decrements the stock for a given part within a transaction.
+   * @param {object} client - The database client from a transaction.
+   * @param {number} partId - The ID of the part to decrement.
+   */
   static async decrementStock(client, partId) {
-    const query = `
-      UPDATE parts 
-      SET stock_quantity = stock_quantity - 1 
-      WHERE id = $1 AND stock_quantity > 0
-      RETURNING *;
-    `;
-    const res = await client.query(query, [partId]);
-    if (res.rowCount === 0) {
-      throw new Error("Stock insuffisant ou pièce introuvable.");
+    if (!client) {
+      throw new Error('A database client is required for decrementStock to ensure transactional integrity.');
     }
-    return res.rows[0];
+    if (!partId) {
+      throw new Error('Part ID is required to decrement stock.');
+    }
+
+    const partResult = await client.query('SELECT stock_quantity FROM parts WHERE id = $1 FOR UPDATE', [partId]);
+    if (partResult.rows.length === 0) {
+      throw new Error('Part not found.');
+    }
+
+    const currentStock = partResult.rows[0].stock_quantity;
+    if (currentStock < 1) {
+      throw new Error('Cannot decrement stock. Part is already out of stock.');
+    }
+
+    await client.query('UPDATE parts SET stock_quantity = stock_quantity - 1 WHERE id = $1', [partId]);
   }
 }
